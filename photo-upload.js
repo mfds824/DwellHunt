@@ -8,17 +8,27 @@
   const API = `https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`;
   const MAX_SIZE = 5 * 1024 * 1024;
 
-  function findPhotoField() {
-    for (const label of document.querySelectorAll("label")) {
-      if (
-        label.textContent.trim().toLowerCase() ===
-        "hero photograph url"
-      ) {
-        return label.parentElement?.querySelector("input");
-      }
+ 
+function findPhotoField() {
+  const inputs = document.querySelectorAll("input");
+
+  for (const input of inputs) {
+    const parent = input.parentElement;
+    const grandparent = parent?.parentElement;
+
+    const nearbyText = [
+      parent?.textContent || "",
+      grandparent?.textContent || ""
+    ].join(" ").toLowerCase();
+
+    if (nearbyText.includes("hero photograph url")) {
+      return input;
     }
-    return null;
   }
+
+  return null;
+}
+
 
   function setReactInput(input, value) {
     const setter = Object.getOwnPropertyDescriptor(
