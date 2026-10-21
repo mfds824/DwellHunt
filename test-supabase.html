@@ -1,0 +1,62 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DwellHunt - Supabase Connection Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #101827;
+      color: white;
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .card {
+      background: #1e293b;
+      padding: 30px;
+      border-radius: 15px;
+      max-width: 480px;
+      margin: auto;
+    }
+    #result {
+      margin-top: 20px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>DwellHunt</h1>
+    <h3>Supabase Connection Test</h3>
+    <p id="result">Connecting to Supabase...</p>
+  </div>
+
+  <script type="module">
+    import { supabase } from "./supabase-config.js";
+
+    const result = document.getElementById("result");
+
+    try {
+      const { data, error } = await supabase
+        .from("properties")
+        .select("id")
+        .eq("status", "published")
+        .limit(1);
+
+      if (error) {
+        result.textContent = "ERROR: " + error.message;
+        result.style.color = "#f87171";
+      } else {
+        result.textContent =
+          "SUCCESS! DwellHunt connected to Supabase.";
+        result.style.color = "#4ade80";
+      }
+    } catch (err) {
+      result.textContent = "ERROR: " + err.message;
+      result.style.color = "#f87171";
+    }
+  </script>
+</body>
+</html>
