@@ -1,110 +1,91 @@
 
+/* DwellHunt Cloudinary Photo Upload */
 (() => {
   "use strict";
 
-  const CLOUD_NAME = "xx8yy8mw";
-  const UPLOAD_PRESET = "dwellhunt_properties";
-  const UPLOAD_URL =
-    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
-
+  const CLOUD = "xx8yy8mw";
+  const PRESET = "dwellhunt_properties";
+  const API = `https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`;
   const MAX_SIZE = 5 * 1024 * 1024;
 
   function findPhotoField() {
-    const inputs = [...document.querySelectorAll('input')];
-
-    return inputs.find(input => {
-      const placeholder = (input.placeholder || "").toLowerCase();
-      const label = input.closest("div")?.parentElement?.innerText
-        ?.toLowerCase() || "";
-
-      return (
-        placeholder.includes("image url") ||
-        placeholder.includes("photo url") ||
-        placeholder.includes("photo by url") ||
-        (input.type === "url" && /photo|image/.test(label))
-      );
-    });
+    for (const label of document.querySelectorAll("label")) {
+      if (
+        label.textContent.trim().toLowerCase() ===
+        "hero photograph url"
+      ) {
+        return label.parentElement?.querySelector("input");
+      }
+    }
+    return null;
   }
 
-  function updateReactInput(input, value) {
+  function setReactInput(input, value) {
     const setter = Object.getOwnPropertyDescriptor(
       HTMLInputElement.prototype,
       "value"
-    )?.set;
+    ).set;
 
-    if (setter) {
-      setter.call(input, value);
-    } else {
-      input.value = value;
-    }
-
+    setter.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
-  function createUploader(input) {
-    if (input.dataset.dhUploadAttached) return;
+  function addUploader(input) {
+    if (input.dataset.uploaderAdded === "yes") return;
+    input.dataset.uploaderAdded = "yes";
 
-    input.dataset.dhUploadAttached = "true";
-
-    const wrapper = document.createElement("div");
-    wrapper.style.cssText = `
-      margin: 12px 0;
-      padding: 18px;
-      border: 2px dashed #059669;
-      border-radius: 14px;
-      background: #ecfdf5;
-      font-family: Arial, sans-serif;
+    const panel = document.createElement("div");
+    panel.style.cssText = `
+      margin:12px 0;
+      padding:16px;
+      border:1px dashed #059669;
+      border-radius:12px;
+      background:#ecfdf5;
+      color:#064e3b;
     `;
 
-    wrapper.innerHTML = `
-      <div style="font-weight:700;margin-bottom:10px;color:#065f46">
-        Upload Property Photo
-      </div>
+    const title = document.createElement("div");
+    title.textContent = "Upload Property Photo";
+    title.style.cssText = "font-weight:bold;margin-bottom:12px";
 
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        style="width:100%;margin-bottom:12px"
-      />
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = "image/jpeg,image/png,image/webp";
+    picker.style.cssText = "display:block;width:100%;margin-bottom:12px";
 
-      <button type="button" style="
-        background:#047857;
-        color:white;
-        border:0;
-        border-radius:8px;
-        padding:11px 18px;
-        cursor:pointer;
-        font-weight:700;
-      ">
-        Upload Photo
-      </button>
-
-      <p class="dh-upload-status"
-         style="font-size:13px;margin-top:10px">
-        Select a JPG, PNG or WebP photo (max 5 MB).
-      </p>
-
-      <img class="dh-upload-preview"
-           alt="Property photo preview"
-           style="
-             display:none;
-             width:100%;
-             max-width:260px;
-             margin-top:12px;
-             border-radius:10px;
-           "/>
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Upload Photo";
+    button.style.cssText = `
+      background:#047857;
+      color:white;
+      border:0;
+      padding:11px 18px;
+      border-radius:8px;
+      cursor:pointer;
+      font-weight:bold;
     `;
 
-    input.insertAdjacentElement("afterend", wrapper);
+    const status = document.createElement("p");
+    status.textContent = "Select a JPG, PNG or WebP photo (max 5 MB).";
+    status.style.cssText = "font-size:13px;margin-top:10px";
 
-    const fileInput = wrapper.querySelector('input[type="file"]');
-    const button = wrapper.querySelector("button");
-    const status = wrapper.querySelector(".dh-upload-status");
-    const preview = wrapper.querySelector(".dh-upload-preview");
+    const preview = document.createElement("img");
+    preview.alt = "Property photo preview";
+    preview.style.cssText = `
+      display:none;
+      width:200px;
+      max-width:100%;
+      margin-top:12px;
+      border-radius:10px;
+    `;
+
+    panel.append(title, picker, button, status, preview);
+    input.insertAdjacentElement("afterend", panel);
 
     button.addEventListener("click", async () => {
-      const file = fileInput.files?.[0];
+      const file = picker.files?.[0];
 
       if (!file) {
         status.textContent = "Please select a photo first.";
@@ -112,27 +93,27 @@
       }
 
       if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-        status.textContent = "Only JPG, PNG and WebP are allowed.";
+        status.textContent = "Only JPG, PNG or WebP photos are allowed.";
         return;
       }
 
       if (file.size > MAX_SIZE) {
-        status.textContent = "Photo must be smaller than 5 MB.";
+        status.textContent = "Photo must be 5 MB or smaller.";
         return;
       }
 
       button.disabled = true;
       button.textContent = "Uploading...";
-      status.textContent = "Uploading photo to Cloudinary...";
+      status.textContent = "Uploading to Cloudinary...";
 
       try {
-        const data = new FormData();
-        data.append("file", file);
-        data.append("upload_preset", UPLOAD_PRESET);
+        const form = new FormData();
+        form.append("file", file);
+        form.append("upload_preset", PRESET);
 
-        const response = await fetch(UPLOAD_URL, {
+        const response = await fetch(API, {
           method: "POST",
-          body: data
+          body: form
         });
 
         const result = await response.json();
@@ -143,17 +124,23 @@
           );
         }
 
-        updateReactInput(input, result.secure_url);
+        const currentInput = findPhotoField();
+
+        if (!currentInput) {
+          throw new Error("Photo field not found. Reopen the form.");
+        }
+
+        setReactInput(currentInput, result.secure_url);
 
         preview.src = result.secure_url;
         preview.style.display = "block";
 
         status.textContent =
-          "Photo uploaded successfully! Image URL added to form.";
+          "Photo uploaded successfully! Continue to publish.";
 
       } catch (error) {
         status.textContent = "Upload failed: " + error.message;
-        console.error("DwellHunt Cloudinary:", error);
+        console.error("DwellHunt Upload Error:", error);
       } finally {
         button.disabled = false;
         button.textContent = "Upload Photo";
@@ -161,23 +148,20 @@
     });
   }
 
-  function initializeUploader() {
+  function scan() {
     const input = findPhotoField();
-
-    if (input) {
-      createUploader(input);
-    }
+    if (input) addUploader(input);
   }
 
-  const observer = new MutationObserver(initializeUploader);
-
   function start() {
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+    const observer = new MutationObserver(scan);
 
-    initializeUploader();
+    observer.observe(
+      document.getElementById("root") || document.body,
+      { childList: true, subtree: true }
+    );
+
+    scan();
   }
 
   if (document.readyState === "loading") {
