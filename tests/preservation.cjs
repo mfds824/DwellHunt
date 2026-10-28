@@ -1,0 +1,13 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const { execFileSync } = require('node:child_process');
+const base = file => execFileSync('git', ['show', `HEAD:${file}`], { encoding: 'utf8' }).replace(/\r\n/g, '\n');
+const read = file => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+for (const file of ['style.css', 'photo-upload.js', 'supabase-config.js']) assert.equal(read(file), base(file));
+const before = 'children:(0,x.jsx)(qn,{property:p,agency:m,agent:h})';
+const after = 'children:(0,x.jsxs)(x.Fragment,{children:[(0,x.jsx)(`button`,{type:`button`,className:`dh-viewing-button`,"data-dh-viewing-id":String(p.id),"data-dh-viewing-title":p.title,children:`Book Virtual Viewing`}),(0,x.jsx)(qn,{property:p,agency:m,agent:h})]})';
+assert.equal(read('app.js').split(after).length, 2);
+assert.equal(read('app.js').replace(after, before), base('app.js'));
+const additions = '\n    <link rel="stylesheet" href="./virtual-viewing.css">\n    <script defer src="./viewing-config.js"></script>\n    <script defer src="./virtual-viewing.js"></script>';
+assert.equal(read('index.html').replace(additions, ''), base('index.html'));
+console.log('PASS existing bundle preserved except one property detail button; existing CSS, uploads, Supabase config, enquiry webhook, listing data and HTML preserved. Static verification only.');
