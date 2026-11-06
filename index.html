@@ -17,15 +17,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script type="module" crossorigin src="./app.js"></script>
     <link rel="stylesheet" crossorigin href="./style.css">
-  </head>
-  
-  <body class="bg-stone-50 text-stone-900 font-sans selection:bg-emerald-100 selection:text-emerald-900">
-    <div id="root"></div>
-    <script defer src="./photo-upload.js"></script>
-  </body>
-</html>
-
-<!-- DwellHunt Floating Chat Buttons -->
+    <!-- Existing floating contact styles retained without changes. -->
 <style>
   #dwellhunt-chat {
     position: fixed;
@@ -83,7 +75,18 @@
     }
   }
 </style>
+    <link rel="stylesheet" href="./website-modernization.css">
+  </head>
 
+  
+  <body class="bg-stone-50 text-stone-900 font-sans selection:bg-emerald-100 selection:text-emerald-900">
+    <div id="root"></div>
+    <script defer src="./photo-upload.js"></script>
+    <link rel="stylesheet" href="./virtual-viewing.css">
+    <script defer src="./viewing-config.js"></script>
+    <script defer src="./virtual-viewing.js"></script>
+
+    <!-- Existing contact links; destinations and event hooks preserved. -->
 <div id="dwellhunt-chat" aria-label="Contact DwellHunt">
   <a
     class="dh-whatsapp"
@@ -107,3 +110,5 @@
     <span>Telegram Us</span>
   </a>
 </div>
+  </body>
+</html>

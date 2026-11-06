@@ -1,0 +1,9 @@
+{
+  "name": "dwellhunt-tdev-d1-lead-intake-candidate",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../source-app/node_modules/typescript/bin/tsc -p tsconfig.json",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

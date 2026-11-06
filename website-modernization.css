@@ -1,0 +1,229 @@
+/* WEBSITE-W002-A: additive presentation only; original generated CSS stays intact.
+   Selectors verified against the root bundle's rendered DOM, not the preview.
+   The .max-w-5xl direct-child guard identifies the existing homepage hero.
+   No booking, uploader, enquiry, dashboard or authentication form selectors. */
+
+/* Header: retain the existing React controls and navigation handlers. */
+#root > div > header > div:first-child > div {
+  gap: 1rem;
+}
+
+#root > div > header nav {
+  gap: 0.125rem;
+}
+
+#root > div > header nav > button {
+  padding-inline: 0.5rem;
+}
+
+#root > div > header button {
+  min-height: 2.75rem;
+}
+
+#root > div > header button[aria-label="Toggle menu"] {
+  min-width: 2.75rem;
+  border: 1px solid #d6d3d1;
+  background: #fafaf9;
+}
+
+/* Focus is limited to the header, homepage and existing floating controls. */
+#root > div > header :is(button, a, select):focus-visible,
+#root > div > main:has(> section:first-child > .max-w-5xl) :is(button, a, input, select):focus-visible,
+#root > div > button[title="Ask DwellBot AI Property Matchmaker"]:focus-visible,
+#dwellhunt-chat a:focus-visible {
+  outline: 3px solid #b45309;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+/* Hero: spacing and control readability, without changing text or search state. */
+#root > div > main > section:first-child:has(> .max-w-5xl) {
+  padding-block: clamp(2rem, 4vw, 3.5rem);
+}
+
+#root > div > main > section:first-child > .max-w-5xl > h1 {
+  max-width: 18ch;
+  margin-inline: auto;
+  margin-bottom: 1.25rem;
+  font-size: clamp(2.125rem, 4.5vw, 3.75rem);
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+#root > div > main > section:first-child > .max-w-5xl > p {
+  margin-bottom: 1.75rem;
+  line-height: 1.7;
+}
+
+#root > div > main > section:first-child > .max-w-5xl > div:has(> form) {
+  padding: clamp(1rem, 2vw, 1.5rem);
+  border-radius: 1.5rem;
+}
+
+#root > div > main > section:first-child > .max-w-5xl > div:has(> form) > div:first-child {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+#root > div > main > section:first-child > .max-w-5xl > div:has(> form) > div:first-child > button {
+  min-height: 2.75rem;
+  margin-inline: 0;
+  padding-inline: 1rem;
+}
+
+#root > div > main > section:first-child > .max-w-5xl form :is(input, select, button) {
+  min-width: 0;
+  min-height: 2.875rem;
+  font-size: 1rem;
+}
+
+#root > div > main > section:first-child > .max-w-5xl form label {
+  color: #57534e;
+  margin-bottom: 0.5rem;
+}
+
+/* Existing popular-location shortcuts, including Colombo; no new categories. */
+#root > div > main > section:first-child > .max-w-5xl > .flex.flex-wrap > button {
+  min-height: 2.75rem;
+  padding-inline: 0.875rem;
+}
+
+/* Homepage only: consistent section rhythm and existing category-card spacing. */
+#root > div > main:has(> section:first-child > .max-w-5xl) > section:not(:first-child) {
+  padding-block: clamp(2.75rem, 5vw, 4.5rem);
+}
+
+#root > div > main:has(> section:first-child > .max-w-5xl) > section:nth-child(2) > div > div:first-child {
+  gap: 1.5rem;
+}
+
+#root > div > main:has(> section:first-child > .max-w-5xl) > section:nth-child(2) > div > div:first-child > .flex {
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+#root > div > main:has(> section:first-child > .max-w-5xl) > section:nth-child(4) > div > .grid > div {
+  padding: 1.25rem;
+  gap: 0.75rem;
+}
+
+/* Separate the existing AI trigger from the unchanged contact link group. */
+#root > div > button[title="Ask DwellBot AI Property Matchmaker"] {
+  bottom: calc(8.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Match the existing menu's visibility to available header space.
+   The original md/lg mismatch hid both navigation choices at tablet widths. */
+@media (max-width: 1279px) {
+  #root > div > header nav {
+    display: none;
+  }
+
+  #root > div > header > div:first-child > div > div:last-child {
+    display: flex;
+    flex-shrink: 0;
+  }
+
+  #root > div > header > div:nth-child(2) {
+    display: block;
+    max-height: calc(100dvh - 5rem);
+    overflow-y: auto;
+    padding-bottom: 1.5rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1279px) {
+  #root > div > header > div:first-child > div {
+    height: auto;
+    min-height: 5rem;
+    padding-block: 0.5rem;
+  }
+
+  #root > div > header > div:first-child > div > .hidden {
+    min-width: 0;
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  #root > div > header > div:first-child > div {
+    gap: 0.75rem;
+  }
+
+  #root > div > header nav {
+    min-width: 0;
+  }
+
+  #root > div > header nav > button {
+    font-size: 0.8125rem;
+  }
+
+  #root > div > header > div:first-child > div > .hidden {
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 399px) {
+  #root > div > header > div:first-child > div {
+    gap: 0.5rem;
+  }
+
+  #root > div > header > div:first-child > div > div:first-child {
+    gap: 0.5rem;
+    column-gap: 0.5rem;
+  }
+
+  #root > div > header > div:first-child > div > div:first-child .text-2xl {
+    font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 639px) {
+  #root > div > main > section:first-child > .max-w-5xl > div:has(> form) > div:first-child > button {
+    flex: 1 1 7rem;
+    padding-inline: 0.5rem;
+  }
+
+  #root > div > main > section:first-child > .max-w-5xl > div:has(> form) > div:first-child > button:last-of-type {
+    flex-basis: 100%;
+  }
+
+  #root > div > main:has(> section:first-child > .max-w-5xl) > section:nth-child(4) > div > .grid > div > .flex-1 > .flex {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  #dwellhunt-chat {
+    flex-direction: row;
+    right: 0.75rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    gap: 0.5rem;
+  }
+
+  #dwellhunt-chat a {
+    min-height: 2.75rem;
+    padding: 0.625rem 0.75rem;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+  }
+
+  #root > div > button[title="Ask DwellBot AI Property Matchmaker"] {
+    right: 0.75rem;
+    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Unlayered, scoped rules override the generated utility layer without !important. */
+@media (prefers-reduced-motion: reduce) {
+  #root > div > header *,
+  #root > div > main:has(> section:first-child > .max-w-5xl) > section *,
+  #root > div > button[title="Ask DwellBot AI Property Matchmaker"],
+  #root > div > button[title="Ask DwellBot AI Property Matchmaker"] *,
+  #dwellhunt-chat a {
+    animation: none;
+    transition: none;
+  }
+}
