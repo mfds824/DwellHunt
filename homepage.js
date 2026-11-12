@@ -1,3 +1,4 @@
+import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings } from "./homepage-search.js";
 // Homepage presentation only. Marketplace state, routes and integrations remain in app.js.
 export function createHomepage(
   React,
@@ -173,7 +174,9 @@ export function createHomepage(
           h(
             "p",
             { className: "dh-price" },
-            formatPrice(p.price, store.currency, p.purpose),
+            p.purpose === "rent" && !["month", "monthly"].includes(rentalPeriod(p))
+              ? `${formatPrice(p.price, store.currency, "buy")} / ${{ weekly: "week", yearly: "year", nightly: "night", daily: "day" }[rentalPeriod(p)] || rentalPeriod(p)}`
+              : formatPrice(p.price, store.currency, p.purpose),
           ),
           p.isNegotiable &&
             h("span", { className: "dh-negotiable" }, "Negotiable"),
@@ -219,11 +222,19 @@ export function createHomepage(
       ),
     );
   }
-  function Featured() {
+  function ResultsBar({ id, count, sortBy, onSort, featured = false, purpose, shown = count, invalid = false }) {
+    return h("div", { className: "dh-results-bar" },
+      h("p", { role: "status", className: "dh-results-note", "aria-live": "polite" }, invalid ? "Correct the budget to see matching listings." :
+        `${count} ${featured ? "featured" : "matching"} ${purpose === "rent" ? "rental" : "sale"} listing${count === 1 ? "" : "s"}${shown < count ? ` · showing ${shown}` : ""}${purpose === "rent" ? " · LKR/month comparison" : ""}`),
+      h("label", { htmlFor: id, className: "dh-sort-control" }, "Sort by",
+        h("select", { id, value: sortBy, onChange: event => onSort(event.target.value), "aria-label": featured ? "Sort featured properties by" : "Sort matching listings by" },
+          SORT_OPTIONS.map(([value, label]) => h("option", { key: value, value }, label)))));
+  }
+  function Featured({ purpose, sortBy, onSort }) {
     const store = useMarketplace();
     const [tab, setTab] = React.useState("all");
     const featured = store.properties.filter(
-      (p) => residential(p) && p.featured,
+      (p) => residential(p) && p.featured && p.purpose === purpose,
     );
     const tabs = [
       ["all", "All featured"],
@@ -231,13 +242,7 @@ export function createHomepage(
         featured.some((p) => p.category === key),
       ),
     ];
-    const properties = featured
-      .filter((p) => tab === "all" || p.category === tab)
-      .sort(
-        (a, b) =>
-          Number(b.category === "apartment") -
-          Number(a.category === "apartment"),
-      );
+    const properties = sortHomeListings(featured.filter((p) => tab === "all" || p.category === tab), sortBy);
     if (!featured.length) return null;
     return h(
       "section",
@@ -254,11 +259,6 @@ export function createHomepage(
           h("p", { className: "dh-eyebrow" }, "From the existing portfolio"),
           h("h2", { id: "dh-featured-title" }, "Featured properties"),
         ),
-        h(
-          "a",
-          { href: "#dh-listings", className: "dh-button dh-featured-browse" },
-          "Explore homes",
-        ),
       ),
       h(
         "div",
@@ -274,6 +274,7 @@ export function createHomepage(
           }),
         ),
       ),
+      h(ResultsBar, { id: "dh-featured-sort", count: properties.length, sortBy, onSort, featured: true, purpose, shown: Math.min(6, properties.length) }),
       h(
         "div",
         { className: "dh-property-grid" },
@@ -299,65 +300,27 @@ export function createHomepage(
     const [maxPrice, setMaxPrice] = React.useState("");
     const [bedrooms, setBedrooms] = React.useState("any");
     const [category, setCategory] = React.useState("apartment");
-    const [sortBy, setSortBy] = React.useState("featured");
-    const [layout, setLayout] = React.useState("grid");
+    const [sortBy, setSortBy] = React.useState("newest");
     const [savedOnly, setSavedOnly] = React.useState(false);
     const inventory = store.properties.filter(residential);
     const types = ["all", ...Object.keys(labels)];
     const available = inventory.filter((p) => p.purpose === purpose);
     const cities = [...new Set(available.map((p) => p.city))].sort();
-    const priceStep = purpose === "rent" ? 10000 : 1000000;
-    const priceLimit =
-      Math.ceil(
-        Math.max(
-          priceStep,
-          ...available.map((p) => Number(p.price) || 0),
-          Number(minPrice) || 0,
-          Number(maxPrice) || 0,
-        ) / priceStep,
-      ) * priceStep;
-    const changeMinimum = (value) => {
-      setMinPrice(value);
-      if (value !== "" && maxPrice !== "" && Number(value) > Number(maxPrice))
-        setMaxPrice(value);
-    };
-    const changeMaximum = (value) => {
-      setMaxPrice(value);
-      if (value !== "" && minPrice !== "" && Number(value) < Number(minPrice))
-        setMinPrice(value);
-    };
-    const priceText = (value) => `LKR ${Number(value).toLocaleString("en-LK")}`;
-    const shown = available.filter(
-      (p) =>
-        (category === "all" || p.category === category) &&
-        (!savedOnly || store.isPropertySaved(p.id)) &&
-        (!location || p.city === location) &&
-        (minPrice === "" || p.price >= Number(minPrice)) &&
-        (maxPrice === "" || p.price <= Number(maxPrice)) &&
-        (bedrooms === "any" || p.bedrooms >= Number(bedrooms)),
-    );
-    shown.sort((a, b) =>
-      sortBy === "price_asc"
-        ? a.price - b.price
-        : sortBy === "price_desc"
-          ? b.price - a.price
-          : sortBy === "newest"
-            ? new Date(b.updatedAt) - new Date(a.updatedAt)
-            : Number(b.featured) - Number(a.featured),
-    );
-    const search = (event) => {
+    const budgetProblem = budgetError(minPrice, maxPrice, purpose);
+    const activePreset = selectedBudgetPreset(minPrice, maxPrice, purpose);
+    const shown = sortHomeListings(filterHomeListings(inventory, {
+      purpose, category, location, minPrice, maxPrice, bedrooms, savedOnly,
+    }, store.isPropertySaved), sortBy);
+    const search = (event, advanced = false) => {
       event.preventDefault();
+      if (budgetProblem) return;
       store.setFilters({
-        ...defaults,
-        purpose,
-        location,
-        minPrice: minPrice === "" ? null : Number(minPrice),
-        maxPrice: maxPrice === "" ? null : Number(maxPrice),
-        bedrooms,
-        category,
-        sortBy,
+        ...defaults, purpose, location,
+        minPrice: budgetValue(minPrice, purpose), maxPrice: budgetValue(maxPrice, purpose),
+        bedrooms, category, sortBy,
       });
-      go(store, "search");
+      if (advanced) go(store, "search");
+      else document.getElementById("dh-listings")?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
     const select = (id, title, value, onChange, options) =>
       h(
@@ -484,7 +447,7 @@ export function createHomepage(
               h(
                 "p",
                 { className: "dh-rental-note", role: "status" },
-                "A short stay or a longer lease? Tell the agency your dates and preferred duration. Current listings show monthly prices; short-stay availability and nightly rates need agency confirmation.",
+                "Budgets and price sorting use LKR per month. Other billing periods use approximate monthly equivalents; each card keeps its actual period. Short-stay dates still need owner or agency confirmation.",
               ),
             h(
               "div",
@@ -519,104 +482,34 @@ export function createHomepage(
                 }),
               ),
             ),
-            h(
-              "fieldset",
-              { className: "dh-price-range" },
-              h(
-                "legend",
-                null,
-                purpose === "rent"
-                  ? "Price range · LKR / month"
-                  : "Price range · LKR",
-              ),
-              h(
-                "div",
-                { className: "dh-price-summary" },
-                h(
-                  "output",
-                  { "aria-live": "polite", "aria-atomic": true },
-                  `${priceText(minPrice || 0)} – ${maxPrice === "" ? "No maximum" : priceText(maxPrice)}${purpose === "rent" ? " / month" : ""}`,
-                ),
-                button(
-                  "Reset",
-                  () => {
-                    setMinPrice("");
-                    setMaxPrice("");
-                  },
-                  "dh-price-reset",
-                  { "aria-label": "Reset price range" },
-                ),
-              ),
-              h(
-                "div",
-                { className: "dh-price-controls" },
-                h(
-                  "div",
-                  null,
-                  h("label", { htmlFor: "dh-min-price" }, "Minimum price"),
-                  h("input", {
-                    id: "dh-min-price",
-                    type: "number",
-                    min: 0,
-                    step: "any",
-                    inputMode: "decimal",
-                    value: minPrice,
-                    placeholder: "0",
-                    onChange: (e) => changeMinimum(e.target.value),
-                  }),
-                  h("input", {
-                    type: "range",
-                    min: 0,
-                    max: priceLimit,
-                    step: priceStep,
-                    value: minPrice || 0,
-                    "aria-label": "Adjust minimum price",
-                    "aria-valuetext": priceText(minPrice || 0),
-                    onChange: (e) => changeMinimum(e.target.value),
-                  }),
-                ),
-                h(
-                  "div",
-                  null,
-                  h("label", { htmlFor: "dh-max-price" }, "Maximum price"),
-                  h("input", {
-                    id: "dh-max-price",
-                    type: "number",
-                    min: 0,
-                    step: "any",
-                    inputMode: "decimal",
-                    value: maxPrice,
-                    placeholder: "No maximum",
-                    onChange: (e) => changeMaximum(e.target.value),
-                  }),
-                  h("input", {
-                    type: "range",
-                    min: 0,
-                    max: priceLimit,
-                    step: priceStep,
-                    value: maxPrice === "" ? priceLimit : maxPrice,
-                    "aria-label": "Adjust maximum price",
-                    "aria-valuetext":
-                      maxPrice === "" ? "No maximum" : priceText(maxPrice),
-                    onChange: (e) =>
-                      changeMaximum(
-                        e.target.value === String(priceLimit)
-                          ? ""
-                          : e.target.value,
-                      ),
-                  }),
-                ),
-              ),
-            ),
+            h("fieldset", { className: "dh-price-range", "aria-describedby": budgetProblem ? "dh-budget-error" : "dh-budget-summary" },
+              h("legend", null, purpose === "rent" ? "Your budget · LKR thousands / month" : "Your budget · LKR millions"),
+              h("div", { className: "dh-budget-presets", role: "group", "aria-label": "Budget presets" },
+                budgetPresets(purpose).map(preset => button(preset.label, () => { setMinPrice(preset.min); setMaxPrice(preset.max); }, "dh-property-tab", {
+                  key: preset.id, "aria-pressed": activePreset === preset.id,
+                }))),
+              h("div", { className: "dh-price-summary" },
+                h("output", { id: "dh-budget-summary", "aria-live": "polite", "aria-atomic": true }, budgetSummary(minPrice, maxPrice, purpose)),
+                button("Reset", () => { setMinPrice(""); setMaxPrice(""); }, "dh-price-reset", { "aria-label": "Reset budget" })),
+              h("div", { className: "dh-price-controls" },
+                h("div", null, h("label", { htmlFor: "dh-min-price" }, purpose === "rent" ? "Minimum (thousands / month)" : "Minimum (millions)"),
+                  h("input", { id: "dh-min-price", type: "number", min: 0, step: "any", inputMode: "decimal", value: minPrice, placeholder: "Any minimum",
+                    "aria-invalid": !!budgetProblem, "aria-describedby": budgetProblem ? "dh-budget-error" : "dh-budget-summary", onChange: e => setMinPrice(e.target.value) })),
+                h("div", null, h("label", { htmlFor: "dh-max-price" }, purpose === "rent" ? "Maximum (thousands / month)" : "Maximum (millions)"),
+                  h("input", { id: "dh-max-price", type: "number", min: 0, step: "any", inputMode: "decimal", value: maxPrice, placeholder: "No maximum",
+                    "aria-invalid": !!budgetProblem, "aria-describedby": budgetProblem ? "dh-budget-error" : "dh-budget-summary", onChange: e => setMaxPrice(e.target.value) }))),
+              budgetProblem ? h("p", { id: "dh-budget-error", className: "dh-budget-error", role: "alert" }, budgetProblem) :
+                h("p", { className: "dh-budget-count", role: "status", "aria-live": "polite" }, `${shown.length} matching listing${shown.length === 1 ? "" : "s"}${purpose === "rent" ? " · monthly price comparison" : ""}`),
+              h("p", { className: "dh-search-note" }, "Leave either field empty for no limit. “Under” excludes its upper limit; other ranges include both limits.")),
             h(
               "button",
-              { type: "submit", className: "dh-button dh-search-submit" },
+              { type: "submit", className: "dh-button dh-search-submit", disabled: !!budgetProblem },
               "Explore listings",
             ),
           ),
         ),
       ),
-      h(Featured),
+      h(Featured, { purpose, sortBy, onSort: setSortBy }),
       h(
         "section",
         {
@@ -633,13 +526,6 @@ export function createHomepage(
             h("p", { className: "dh-eyebrow" }, "A place to begin"),
             h("h2", { id: "dh-listings-title" }, "Find your kind of home."),
           ),
-          h("p", null, "Picture your life here. Save the homes you love, compare the details, and find the place that feels like you."),
-        ),
-        h(
-          "p",
-          { role: "status", className: "dh-results-note" },
-          `${shown.length} ${purpose === "rent" ? "rental" : "sale"} listing${shown.length === 1 ? "" : "s"} matching your filters.`,
-          purpose === "rent" ? " Rental prices are per month." : "",
         ),
         h(
           "div",
@@ -653,7 +539,7 @@ export function createHomepage(
               "dh-property-tab",
               { "aria-pressed": savedOnly },
             ),
-            button("More filters & map", search, "dh-property-tab"),
+            button("More filters & map", event => search(event, true), "dh-property-tab", { disabled: !!budgetProblem }),
             button(
               "Reset filters",
               () => {
@@ -663,42 +549,17 @@ export function createHomepage(
                 setBedrooms("any");
                 setCategory("apartment");
                 setSavedOnly(false);
-                setSortBy("featured");
+                setSortBy("newest");
               },
               "dh-property-tab",
             ),
           ),
-          h(
-            "div",
-            { className: "dh-toolbar-actions" },
-            select("dh-sort", "Sort listings", sortBy, setSortBy, [
-              ["featured", "Featured first"],
-              ["price_asc", "Price: low to high"],
-              ["price_desc", "Price: high to low"],
-              ["newest", "Recently updated"],
-            ]),
-            h(
-              "div",
-              {
-                role: "group",
-                "aria-label": "Listing layout",
-                className: "dh-layout-toggle",
-              },
-              ["grid", "list"].map((value) =>
-                button(
-                  value === "grid" ? "Grid" : "List",
-                  () => setLayout(value),
-                  "dh-property-tab",
-                  { key: value, "aria-pressed": value === layout },
-                ),
-              ),
-            ),
-          ),
         ),
+        h(ResultsBar, { id: "dh-sort", count: shown.length, sortBy, onSort: setSortBy, purpose, invalid: !!budgetProblem }),
         h(
           "div",
           {
-            className: `dh-property-grid ${layout === "list" ? "dh-property-list" : ""}`,
+            className: "dh-property-grid",
           },
           shown.map((p) => h(PropertyCard, { key: p.id, property: p })),
         ),
@@ -706,7 +567,7 @@ export function createHomepage(
           h(
             "p",
             { className: "dh-empty" },
-            "No matching homes in the current inventory. Try another location, budget or property type.",
+            budgetProblem ? "Correct the budget above to view matching homes." : "No matching homes in the current inventory. Try another location, budget or property type.",
           ),
         store.comparePropertyIds.length > 0 &&
           button("Open comparison", () => go(store, "compare")),
