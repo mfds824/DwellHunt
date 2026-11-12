@@ -6,5 +6,11 @@
 .dh-listing-choice { position: relative; display: flex; align-items: center; justify-content: center; min-height: 52px; }
 .dh-listing-choice input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* Match the site-wide focus-visible treatment in homepage.css. */
-.dh-listing-choice:focus-within { outline: 3px solid #a86b27; outline-offset: 4px; }
+.dh-listing-choice:has(input:focus-visible) { outline: 3px solid #a86b27; outline-offset: 4px; }
 .dh-listing-continue:disabled { cursor: not-allowed; background-color: var(--color-emerald-900); }
+
+/* Saved selections stay clear in all three Step 1 groups. */
+.dh-listing-choice { padding-inline: 34px; }
+.dh-listing-choice[data-selected="true"] { border-color: var(--color-emerald-900); box-shadow: inset 0 0 0 2px var(--color-emerald-900), 0 0 0 4px color-mix(in srgb, var(--color-emerald-600) 20%, transparent); }
+.dh-listing-check { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--color-emerald-100); color: var(--color-emerald-900); font-size: 13px; font-weight: 800; line-height: 1; }
+.dh-listing-actions { align-items: center; gap: 16px; flex-wrap: wrap; }

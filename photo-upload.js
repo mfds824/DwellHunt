@@ -1,12 +1,12 @@
+import { CLOUDINARY_UPLOAD_URL, CLOUDINARY_UPLOAD_PRESET, MAX_UPLOAD_BYTES } from "./property-upload.js";
 
 /* DwellHunt Cloudinary Photo Upload */
 (() => {
   "use strict";
 
-  const CLOUD = "xx8yy8mw";
-  const PRESET = "dwellhunt_properties";
-  const API = `https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`;
-  const MAX_SIZE = 5 * 1024 * 1024;
+  const PRESET = CLOUDINARY_UPLOAD_PRESET;
+  const API = CLOUDINARY_UPLOAD_URL;
+  const MAX_SIZE = MAX_UPLOAD_BYTES;
 
  
 function findPhotoField() {
