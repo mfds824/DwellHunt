@@ -1,0 +1,2 @@
+// PREPARED ONLY. Publish after hosted Production health checks pass. No secrets.
+window.DWELLHUNT_VIEWING=Object.freeze({testMode:false,availablePropertyIds:['prop-cinnamon-gardens-villa'],turnstileSiteKey:'0x4AAAAAAF4s9avy4mA0dien',bookingUrl:'https://dwellhunt-viewing-api-production.countdracula-11537.workers.dev/api/dwellhunt/bookings',buyerActionsUrl:'https://dwellhunt-viewing-api-production.countdracula-11537.workers.dev/api/dwellhunt/buyer-actions'});

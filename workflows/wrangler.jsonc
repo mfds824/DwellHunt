@@ -1,0 +1,80 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "dwellhunt-viewing-api-dev",
+  "account_id": "599edd273f1d6be4bd6da48bdabb7961",
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2026-11-08",
+  "workers_dev": true,
+  "previews": {
+    "vars": {
+      "WEBSITE_ORIGIN": "https://development.dwellhunt-viewing-dev.pages.dev"
+    },
+    "observability": {
+      "enabled": true,
+      "logs": {
+        "enabled": true,
+        "invocation_logs": true,
+        "persist": true
+      }
+    }
+  },
+  "vars": {
+    "WEBSITE_ORIGIN": "https://development.dwellhunt-viewing-dev.pages.dev",
+    "AUTOMATION_ENABLED": "true",
+    "AUTOMATION_ENVIRONMENT": "development",
+    "VIEWING_TEST_ORIGIN": "https://mfds824.github.io"
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "persist": true
+    }
+  },
+  "env": {
+    "production": {
+      "name": "dwellhunt-viewing-api-production",
+      "workers_dev": true,
+      "vars": {
+        "WEBSITE_ORIGIN": "https://mfds824.github.io",
+        "AUTOMATION_ENABLED": "false",
+        "AUTOMATION_ENVIRONMENT": "production",
+        "PUBLIC_BOOKINGS_ENABLED": "false"
+      },
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "enabled": true,
+          "invocation_logs": true,
+          "persist": true
+        },
+        "traces": {
+          "enabled": true
+        }
+      },
+      "secrets": {
+        "required": [
+          "TRIGGER_SECRET_KEY",
+          "TURNSTILE_SECRET_KEY",
+          "TELEGRAM_WEBHOOK_SECRET"
+        ]
+      },
+      "triggers": {
+        "crons": []
+      }
+    }
+  },
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
+  },
+  "secrets": {
+    "required": [
+      "TRIGGER_SECRET_KEY",
+      "TURNSTILE_SECRET_KEY",
+      "TELEGRAM_WEBHOOK_SECRET"
+    ]
+  }
+}
