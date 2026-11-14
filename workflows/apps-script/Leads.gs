@@ -80,6 +80,8 @@ function dhLeadPhoneKey_(phone) {
   let digits = String(phone || '').replace(/[^0-9]/g, '');
   if (digits.indexOf('00') === 0) digits = digits.slice(2);
   if (digits.length === 10 && digits.charAt(0) === '0') digits = '94' + digits.slice(1);
+  // A Sri Lankan mobile whose leading 0 Sheets dropped (rows saved before phones were stored as text).
+  if (digits.length === 9 && digits.charAt(0) === '7') digits = '94' + digits;
   return digits.length >= 8 ? digits : '';
 }
 
@@ -89,10 +91,10 @@ function dhLeadSameMessage_(a, b, title) {
   const n = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   return n(a) === n(b);
 }
-/** Sheet rows as text, without the apostrophe safeCell adds in front of values such as "+94…". */
+/** Sheet rows as text, without the apostrophe added in front of phones and values such as "+94…". */
 function dhLeadRows_(s) {
   return s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, DH_LEAD_COLUMNS.length).getDisplayValues()
-    .map(r => r.map(v => String(v).replace(/^'(?=[=+@\-])/, ''))) : [];
+    .map(r => r.map(v => String(v).replace(/^'/, ''))) : [];
 }
 
 function dhLead_(p) {
@@ -148,6 +150,8 @@ function dhLead_(p) {
     'Confirmation Email Sent': spam ? 'not sent (spam)' : followUp ? 'not sent (follow-up)' : '', 'Score Version': DH_LEAD_SCORE_VERSION,
     'Alert Key': spam ? '' : key, 'Status Updated At': '',
   };
+  // A leading apostrophe keeps phone numbers as text, so Sheets cannot drop the leading 0.
+  if (record['Phone']) record['Phone'] = "'" + record['Phone'];
   s.appendRow(DH_LEAD_COLUMNS.map(k => safeCell(record[k])));
   if (spam) return { httpStatus: 200, status: 'received', duplicate: false };
   const row = s.getLastRow();

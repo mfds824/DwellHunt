@@ -471,3 +471,16 @@ test('The same person is matched by email or phone, and template-only repeats st
   assert.equal(rowOf()['Lead Status'], 'new'); assert.match(String(rowOf()['Ai lead reason']), /Enquired before/);
   c.DH_VIEWING_CONTEXT_ = '';
 });
+
+test('Phones are stored as text, and rows whose leading 0 Sheets already dropped still match', () => {
+  const { c, rows, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  assert.equal(c.dhLeadPhoneKey_('770153678'), '94770153678');
+  c.dhLead_({ ...templateLead, email: 'first@example.test', phone: '0770153678' });
+  assert.equal(rows[0][(c.DH_LEAD_COLUMNS as string[]).indexOf('Phone')], "'0770153678");
+  rows[0][(c.DH_LEAD_COLUMNS as string[]).indexOf('Phone')] = 770153678;
+  assert.equal(c.dhLead_({ ...templateLead, email: 'second@example.test', phone: '0770153678' }).duplicate, true);
+  c.dhLead_({ ...templateLead, email: 'second@example.test', phone: '0770153678', property_id: 'p7', property: 'Other' });
+  assert.match(String(rowOf()['Ai lead reason']), /Enquired before/);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
