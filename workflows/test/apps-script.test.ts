@@ -215,9 +215,10 @@ function leadHarness(settings: Record<string,string|undefined> = {}) {
   const sent: { telegram: any[]; calls: [string, any][]; email: any[]; logs: string[]; sheets: string[] } =
     { telegram: [], calls: [], email: [], logs: [], sheets: [] };
   let n = 0;
-  const clock = { hour: 12 };
+  const clock = { hour: 12, weekday: 3, week: '2026-W47', today: '' };
   c.Utilities = { getUuid: () => `0000-0000-0000-${String(++n).padStart(4, '0')}`,
-    formatDate: (d: Date, _tz: string, fmt: string) => fmt === 'H' ? String(clock.hour) : fmt === 'yyyy-MM-dd' ? d.toISOString().slice(0, 10) : 'Fri, 20 Nov 2026' };
+    formatDate: (d: Date, _tz: string, fmt: string) => fmt === 'H' ? String(clock.hour) : fmt === 'u' ? String(clock.weekday)
+      : fmt === "YYYY-'W'ww" ? clock.week : fmt === 'yyyy-MM-dd' ? (clock.today || d.toISOString().slice(0, 10)) : 'Fri, 20 Nov 2026' };
   c.SpreadsheetApp = { openById: () => ({ getSheetByName: () => null }) };
   c.all = () => [];
   c.sheet = (name: string, cols: string[]) => { sent.sheets.push(name + '@' + c.cfg('SPREADSHEET_ID')); return {
@@ -423,7 +424,7 @@ test('Gateway accepts the lead and lead_digest actions in Production context', (
   const c = developmentHarness({ ...developmentSettings, GATEWAY_SECRET: 'mock-key' });
   runInNewContext(leadsSource, c);
   c.dhLead_ = () => ({ httpStatus: 200, status: 'received', context: c.DH_VIEWING_CONTEXT_ });
-  c.dhLeadDigest_ = () => ({ processed: 0, errors: 0, context: c.DH_VIEWING_CONTEXT_ });
+  c.dhLeadMaintenance_ = () => ({ processed: 0, errors: 0, context: c.DH_VIEWING_CONTEXT_ });
   for (const action of ['lead', 'lead_digest']) {
     const r = c.dhHandlePost_({ postData: { contents: JSON.stringify({ gatewaySecret: 'mock-key', environment: 'production', action, payload: {} }) } });
     assert.equal(r.ok, true); assert.equal(r.context, 'production'); assert.equal(c.DH_VIEWING_CONTEXT_, '');
@@ -482,5 +483,93 @@ test('Phones are stored as text, and rows whose leading 0 Sheets already dropped
   assert.equal(c.dhLead_({ ...templateLead, email: 'second@example.test', phone: '0770153678' }).duplicate, true);
   c.dhLead_({ ...templateLead, email: 'second@example.test', phone: '0770153678', property_id: 'p7', property: 'Other' });
   assert.match(String(rowOf()['Ai lead reason']), /Enquired before/);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Outcome buttons record viewing done and deal, and show only the next sensible steps', () => {
+  const { c, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...goodLead });
+  const keyboard = sent.telegram[0].reply_markup.inline_keyboard;
+  assert.equal(JSON.stringify(keyboard.map((r: any[]) => r.map(b => b.text))),
+    JSON.stringify([['✅ Contacted', '❌ Not interested'], ['🏠 Viewing done', '🤝 Deal / offer']]));
+  const data = (op: string) => keyboard.flat().find((b: any) => b.callback_data.endsWith('|' + op)).callback_data;
+  const press = (op: string) => c.agentAction({ callback_query: { id: 'cb', data: data(op), message: { chat: { id: 111 }, message_id: 9 }, from: { id: 111 } } });
+  assert.equal(press('c').status, 'lead_contacted');
+  const firstPress = rowOf()['Status Updated At'];
+  assert.equal(rowOf()['Outcome'], '');
+  assert.equal(press('v').status, 'lead_viewing_done');
+  assert.equal(rowOf()['Lead Status'], 'viewing done'); assert.equal(rowOf()['Outcome'], 'viewing done'); assert.notEqual(rowOf()['Outcome At'], '');
+  assert.equal(rowOf()['Status Updated At'], firstPress);
+  let edit = sent.calls.filter(([m]) => m === 'editMessageReplyMarkup').at(-1)![1];
+  assert.equal(JSON.stringify(edit.reply_markup.inline_keyboard.map((r: any[]) => r.map(b => b.text))),
+    JSON.stringify([['🏠 Marked: viewing done'], ['🤝 Deal / offer', '❌ Not interested']]));
+  assert.equal(press('d').status, 'lead_deal'); assert.equal(rowOf()['Outcome'], 'deal');
+  edit = sent.calls.filter(([m]) => m === 'editMessageReplyMarkup').at(-1)![1];
+  assert.equal(JSON.stringify(edit.reply_markup.inline_keyboard.map((r: any[]) => r.map(b => b.text))), JSON.stringify([['🤝 Marked: deal / offer']]));
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Daily outcome check links later viewing bookings and marks untouched old leads as no response', () => {
+  const { c, rows, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  const cols = c.DH_LEAD_COLUMNS as string[];
+  c.dhLead_({ ...templateLead, email: 'booker@example.test', phone: '0771112223' });
+  c.dhLead_({ ...templateLead, email: 'quiet@example.test', phone: '', property_id: 'p2' });
+  c.dhLead_({ ...templateLead, email: 'agent-set@example.test', phone: '', property_id: 'p3' });
+  rows[1][cols.indexOf('Date')] = new Date(Date.now() - 20 * 86400000).toISOString();
+  rows[2][cols.indexOf('Date')] = new Date(Date.now() - 20 * 86400000).toISOString();
+  rows[2][cols.indexOf('Outcome')] = 'not interested';
+  c.all = () => [{ email: 'someone-else@example.test', whatsapp: '+94771112223', booking_status: 'pending_approval', created_at: new Date().toISOString() }];
+  assert.equal(c.dhLeadOutcomes_(), 2);
+  assert.equal(rowOf(0)['Outcome'], 'viewing booked');
+  assert.equal(rowOf(1)['Outcome'], 'no response');
+  assert.equal(rowOf(2)['Outcome'], 'not interested');
+  c.all = () => [{ email: 'booker@example.test', whatsapp: '', booking_status: 'completed', created_at: new Date().toISOString() }];
+  assert.equal(c.dhLeadOutcomes_(), 1); assert.equal(rowOf(0)['Outcome'], 'viewing done');
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Weekly report shows counts, outcome shares per signal and an early-data warning', () => {
+  const { c } = leadHarness();
+  const cols = c.DH_LEAD_COLUMNS as string[];
+  const make = (o: Record<string, string>) => cols.map(k => o[k] ?? '');
+  const recent = new Date(Date.now() - 86400000).toISOString();
+  const rows = [
+    make({ Date: recent, 'Lead Status': 'deal', 'Ai lead priority': 'HOT', 'Ai lead reason': 'Chose Schedule Tour (+20); Wrote their own message (+20)', Outcome: 'deal', Phone: '0771234567', Budget: '425000000' }),
+    make({ Date: recent, 'Lead Status': 'new', 'Ai lead priority': 'COLD', 'Ai lead reason': 'Default message only, no extra signals', Outcome: 'no response', Budget: '30000000' }),
+    make({ Date: recent, 'Lead Status': 'contacted', 'Ai lead priority': 'WARM', 'Ai lead reason': 'Chose Schedule Tour (+20)', Outcome: 'viewing booked', Phone: '+447700900123' }),
+    make({ Date: recent, 'Lead Status': 'new', 'Ai lead priority': 'WARM', 'Ai lead reason': 'Wrote their own message (+20)' }),
+    make({ Date: recent, 'Lead Status': 'spam', 'Ai lead priority': 'SPAM' }),
+  ];
+  const text = c.dhLeadReportText_(rows);
+  assert.match(text, /^📊 <b>Weekly lead report<\/b>/);
+  assert.match(text, /This week: 4 leads \(🔥 1 · 🟡 2 · 🔵 1\) · 🚫 1 spam/);
+  assert.match(text, /All time: 🏠 1 viewings · 🤝 1 deals · ❌ 0 not interested · 💤 1 no response · ⏳ 1 open/);
+  assert.match(text, /• Schedule Tour: 100% \(2 of 2\)/);
+  assert.match(text, /• Standard message only: 50% \(1 of 2\)/);
+  assert.match(text, /• Overseas number: 100% \(1 of 1\)/);
+  assert.match(text, /• Price under 50M: 0% \(0 of 1\)/);
+  assert.match(text, /⚠️ Early signs only: 3 lead\(s\) with an outcome/);
+  assert.match(c.dhLeadReportText_([]), /No outcomes yet/);
+});
+
+test('Lead maintenance checks outcomes daily and sends the report once on Monday from 09:00', () => {
+  const { c, sent, store, clock } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  let outcomeRuns = 0;
+  c.dhLeadOutcomes_ = () => { outcomeRuns++; return 0; };
+  clock.today = '2026-11-16'; clock.weekday = 1; clock.hour = 8;
+  c.dhLeadMaintenance_(); c.dhLeadMaintenance_();
+  assert.equal(outcomeRuns, 1); assert.equal(store['LIVE_LEAD_OUTCOME_DATE'], '2026-11-16');
+  assert.equal(sent.telegram.length, 0);
+  clock.hour = 9;
+  c.dhLeadMaintenance_();
+  assert.equal(sent.telegram.length, 1); assert.match(sent.telegram[0].text, /Weekly lead report/);
+  c.dhLeadMaintenance_();
+  assert.equal(sent.telegram.length, 1);
+  clock.today = '2026-11-17'; clock.weekday = 2;
+  c.dhLeadMaintenance_();
+  assert.equal(outcomeRuns, 2); assert.equal(sent.telegram.length, 1);
   c.DH_VIEWING_CONTEXT_ = '';
 });

@@ -53,7 +53,7 @@ function dhHandlePost_(e) {
     else if (p.action === 'followup') r = tick(true);
     else if (p.action === 'viewing_health') r = viewingHealth();
     else if (p.action === 'lead') r = dhLead_(p.payload || {});
-    else if (p.action === 'lead_digest') r = dhLeadDigest_();
+    else if (p.action === 'lead_digest') r = dhLeadMaintenance_();
     else if (p.action === 'listing_tracking_health') r = dhListingHealth_();
     else if (p.action === 'listing_sheet_sync') r = dhListingUpsert_(p.payload || {});
     else if (p.action === 'listing_reminder') r = dhListingReminder_(p.payload || {}, false);

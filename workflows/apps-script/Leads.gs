@@ -1,6 +1,7 @@
 /* DwellHunt website enquiries (replaces the archived n8n lead workflow).
- * Reached only through the authenticated gateway: action "lead" (new enquiry), "lead_digest" (evening
- * summary of COLD leads) and Telegram button presses arriving through action "telegram".
+ * Reached only through the authenticated gateway: action "lead" (new enquiry), "lead_digest" (lead
+ * maintenance every fifth minute: daily outcome check, evening COLD digest, Monday learning report)
+ * and Telegram button presses arriving through action "telegram".
  * The Cloudflare Worker has already checked the origin, Turnstile, the honeypot field and contact details.
  * Leads live in DwellHunt_Leads of the context's spreadsheet (LIVE_SPREADSHEET_ID in production).
  * Notification failures never lose the lead. */
@@ -9,7 +10,16 @@ var DH_LEAD_SCORE_VERSION = 'v2';
 var DH_LEAD_COLUMNS = ['Date', 'Lead ID', 'Customer Name', 'Phone', 'Email', 'Customer Type', 'Property', 'Property ID',
   'Preferred Location', 'Budget', 'Preferred Date', 'Message', 'Source', 'Consent At', 'Lead Status',
   'Ai lead score', 'Ai lead priority', 'Ai lead reason', 'Ai next action', 'Ai analyzed at',
-  'Telegram Sent', 'Confirmation Email Sent', 'Score Version', 'Alert Key', 'Status Updated At'];
+  'Telegram Sent', 'Confirmation Email Sent', 'Score Version', 'Alert Key', 'Status Updated At', 'Outcome', 'Outcome At'];
+// Buttons on lead alerts: op -> [button text, Lead Status, Outcome or '' when the press is not an outcome].
+var DH_LEAD_OPS = { c: ['✅ Contacted', 'contacted', ''], n: ['❌ Not interested', 'not interested', 'not interested'],
+  v: ['🏠 Viewing done', 'viewing done', 'viewing done'], d: ['🤝 Deal / offer', 'deal', 'deal'] };
+// Which buttons still make sense after each status.
+var DH_LEAD_NEXT_OPS = { 'new': ['c', 'n', 'v', 'd'], 'follow-up': ['c', 'n', 'v', 'd'], contacted: ['v', 'd', 'n'],
+  'viewing done': ['d', 'n'], deal: [], 'not interested': [] };
+var DH_LEAD_POSITIVE = ['viewing booked', 'viewing done', 'deal'];
+var DH_LEAD_NO_RESPONSE_DAYS = 14;
+var DH_LEAD_REPORT_HOUR = 9; // Monday, Sri Lanka time
 var DH_LEAD_DISPOSABLE = /@(mailinator|guerrillamail|10minutemail|temp-?mail|yopmail|trashmail|sharklasers|getnada|dispostable|maildrop|fakeinbox)\./i;
 var DH_LEAD_LOW_INTENT = /\b(just (browsing|looking|curious|checking)|not urgent|no rush|not in a (hurry|rush)|maybe (later|next year|someday)|next year)\b/i;
 var DH_LEAD_STYLE = { HOT: ['🔥', 'HOT LEAD', 'Reply within 1 hour'], WARM: ['🟡', 'WARM LEAD', 'Reply today'],
@@ -148,7 +158,7 @@ function dhLead_(p) {
     'Ai next action': scored.next, 'Ai analyzed at': at,
     'Telegram Sent': spam ? 'not sent (spam)' : cold && !followUp ? DH_LEAD_DIGEST_PENDING : '',
     'Confirmation Email Sent': spam ? 'not sent (spam)' : followUp ? 'not sent (follow-up)' : '', 'Score Version': DH_LEAD_SCORE_VERSION,
-    'Alert Key': spam ? '' : key, 'Status Updated At': '',
+    'Alert Key': spam ? '' : key, 'Status Updated At': '', 'Outcome': '', 'Outcome At': '',
   };
   // A leading apostrophe keeps phone numbers as text, so Sheets cannot drop the leading 0.
   if (record['Phone']) record['Phone'] = "'" + record['Phone'];
@@ -203,9 +213,19 @@ function dhLeadAlertText_(lead, scored, signals) {
   return sections.map(lines => lines.filter(Boolean).join('\n')).filter(Boolean).join('\n\n').slice(0, 4000);
 }
 
-function dhLeadButtons_(id, key) {
-  return { inline_keyboard: [[{ text: '✅ Contacted', callback_data: 'L|' + id + '|' + key + '|c' },
-    { text: '❌ Not interested', callback_data: 'L|' + id + '|' + key + '|n' }]] };
+/** Buttons for a lead: the status reached so far (if any), then the next sensible steps, two per row. */
+function dhLeadButtons_(id, key, status) {
+  const b = op => ({ text: DH_LEAD_OPS[op][0], callback_data: 'L|' + id + '|' + key + '|' + op });
+  const ops = DH_LEAD_NEXT_OPS[status || 'new'] || DH_LEAD_NEXT_OPS['new'];
+  const rows = [];
+  if (status && status !== 'new' && status !== 'follow-up')
+    rows.push([{ text: dhLeadStatusLabel_(status), callback_data: 'L|' + id + '|' + key + '|s' }]);
+  for (let i = 0; i < ops.length; i += 2) rows.push(ops.slice(i, i + 2).map(b));
+  return { inline_keyboard: rows };
+}
+function dhLeadStatusLabel_(status) {
+  return { contacted: '✅ Marked as contacted', 'not interested': '❌ Marked as not interested',
+    'viewing done': '🏠 Marked: viewing done', deal: '🤝 Marked: deal / offer' }[status] || 'Status: ' + status;
 }
 
 /** Short note for a new message from someone who already enquired about the same property today. */
@@ -228,7 +248,7 @@ function dhLeadTelegram_(lead, scored, signals, id, key, followUp) {
   } catch (e) { log(id, 'LEAD_TELEGRAM_FAILED'); return 'failed'; }
 }
 
-/** Handles the "Contacted" / "Not interested" buttons on a lead alert (callback data L|leadId|key|op). */
+/** Handles the status buttons on a lead alert (callback data L|leadId|key|op; op c, n, v, d or s). */
 function dhLeadAction_(q) {
   const parts = String(q.data || '').split('|'), id = parts[1], key = parts[2], op = parts[3];
   const chat = String(dhLeadChat_());
@@ -240,19 +260,23 @@ function dhLeadAction_(q) {
   const index = rows.findIndex(r => r[col('Lead ID')] === id);
   if (index < 0 || !rows[index][col('Alert Key')] || !equal(key, rows[index][col('Alert Key')])) fail('UNAUTHORIZED_AGENT', 403);
   const current = rows[index][col('Lead Status')];
-  const label = status => status === 'contacted' ? '✅ Marked as contacted' : '❌ Marked as not interested';
   if (op === 's') { ack(q, 'Already saved: ' + current); return { ignored: true }; }
-  const status = op === 'c' ? 'contacted' : op === 'n' ? 'not interested' : fail('INVALID_AGENT_ACTION', 400);
+  if (!DH_LEAD_OPS[op]) fail('INVALID_AGENT_ACTION', 400);
+  const status = DH_LEAD_OPS[op][1], outcome = DH_LEAD_OPS[op][2];
   if (current === status) { ack(q, 'Already saved.'); return { ignored: true }; }
-  const row = index + 2;
+  const row = index + 2, at = now();
   s.getRange(row, col('Lead Status') + 1).setValue(status);
-  s.getRange(row, col('Status Updated At') + 1).setValue(now());
+  // Keeps the first press, so the weekly report can measure how fast the agent replied.
+  if (!rows[index][col('Status Updated At')]) s.getRange(row, col('Status Updated At') + 1).setValue(at);
+  if (outcome) {
+    s.getRange(row, col('Outcome') + 1).setValue(outcome);
+    s.getRange(row, col('Outcome At') + 1).setValue(at);
+  }
   try {
-    tg('editMessageReplyMarkup', { chat_id: fromChat, message_id: q.message.message_id,
-      reply_markup: { inline_keyboard: [[{ text: label(status), callback_data: 'L|' + id + '|' + key + '|s' }]] } });
+    tg('editMessageReplyMarkup', { chat_id: fromChat, message_id: q.message.message_id, reply_markup: dhLeadButtons_(id, key, status) });
   } catch (e) { log(id, 'LEAD_BUTTON_UPDATE_FAILED'); }
   ack(q, 'Saved: ' + status);
-  return { status: 'lead_' + status.replace(' ', '_') };
+  return { status: 'lead_' + status.replace(/ /g, '_') };
 }
 
 /** Once a day after 18:00 Sri Lanka time, sends one summary of COLD leads waiting for the digest. */
@@ -302,4 +326,112 @@ function dhLeadEmail_(lead, id) {
     MailApp.sendEmail({ to: lead.email, subject: 'We received your DwellHunt enquiry', body: text, htmlBody: html, name: 'DwellHunt' });
     return now();
   } catch (e) { log(id, 'LEAD_EMAIL_FAILED'); return 'failed'; }
+}
+
+/** Fills Outcome from what happened later: a virtual-viewing booking by the same email or phone becomes
+ *  "viewing booked" (or "viewing done" once completed); an untouched lead becomes "no response" after 14 days.
+ *  Outcomes pressed by the agent (viewing done, deal, not interested) are never overwritten. */
+function dhLeadOutcomes_() {
+  const s = dhLeadSheet_(), col = dhLeadCol_, rows = dhLeadRows_(s);
+  if (!rows.length) return 0;
+  let bookings = [];
+  try { bookings = all(); } catch (e) { log('', 'LEAD_HISTORY_UNAVAILABLE'); }
+  const nowMs = Date.now(), at = now();
+  let changed = 0;
+  rows.forEach((r, i) => {
+    const status = r[col('Lead Status')], outcome = r[col('Outcome')];
+    if (status === 'spam' || ['deal', 'not interested', 'viewing done'].indexOf(outcome) >= 0) return;
+    const since = Date.parse(r[col('Date')]);
+    const email = r[col('Email')].toLowerCase(), phone = dhLeadPhoneKey_(r[col('Phone')]);
+    const match = bookings.filter(b => !b._redacted && Date.parse(b.created_at) >= since - 3600000 &&
+      ['rejected', 'expired', 'reschedule_requested'].indexOf(b.booking_status) < 0 &&
+      ((email && String(b.email || '').toLowerCase() === email) || (phone && dhLeadPhoneKey_(b.whatsapp) === phone)));
+    let next = '';
+    if (match.some(b => b.booking_status === 'completed')) next = 'viewing done';
+    else if (match.length) next = 'viewing booked';
+    else if (!outcome && ['new', 'follow-up'].indexOf(status) >= 0 && nowMs - since > DH_LEAD_NO_RESPONSE_DAYS * 86400000) next = 'no response';
+    if (next && next !== outcome) {
+      s.getRange(i + 2, col('Outcome') + 1).setValue(next);
+      s.getRange(i + 2, col('Outcome At') + 1).setValue(at);
+      changed++;
+    }
+  });
+  return changed;
+}
+
+/** Weekly learning report: lead counts, outcomes, and the share of each kind of lead that became a viewing or deal. */
+function dhLeadReportText_(rows) {
+  const col = dhLeadCol_;
+  const weekAgo = Date.now() - 7 * 86400000;
+  const inWeek = r => Date.parse(r[col('Date')]) > weekAgo;
+  const leads = rows.filter(r => r[col('Lead Status')] !== 'spam');
+  const week = leads.filter(inWeek), weekSpam = rows.filter(r => r[col('Lead Status')] === 'spam' && inWeek(r)).length;
+  const priority = p => week.filter(r => r[col('Ai lead priority')] === p).length;
+  const outcome = o => leads.filter(r => r[col('Outcome')] === o).length;
+  const decided = leads.filter(r => r[col('Outcome')]);
+  const positive = r => DH_LEAD_POSITIVE.indexOf(r[col('Outcome')]) >= 0;
+  const reason = r => r[col('Ai lead reason')];
+  const local = (r, fmt) => Utilities.formatDate(new Date(r[col('Date')]), 'Asia/Colombo', fmt);
+  const hour = r => Number(local(r, 'H')), weekday = r => Number(local(r, 'u'));
+  const price = r => Number(String(r[col('Budget')]).replace(/[^0-9.]/g, ''));
+  const replied = r => r[col('Status Updated At')] ? (Date.parse(r[col('Status Updated At')]) - Date.parse(r[col('Date')])) / 3600000 : null;
+  const phoneKey = r => dhLeadPhoneKey_(r[col('Phone')]);
+  const groups = [
+    ['What the buyer did', [
+      ['Schedule Tour', r => /Schedule Tour/.test(reason(r))], ['Ask Question', r => !/Schedule Tour/.test(reason(r))],
+      ['Wrote own message', r => /own message/.test(reason(r))], ['Standard message only', r => !/own message/.test(reason(r))],
+      ['Gave phone', r => /phone\/WhatsApp/.test(reason(r))],
+      ['Returning customer', r => /Enquired before|Already booked/.test(reason(r))]]],
+    ['Priority given', ['HOT', 'WARM', 'COLD'].map(p => [p, r => r[col('Ai lead priority')] === p])],
+    ['Situation', [
+      ['Weekday', r => weekday(r) <= 5], ['Weekend', r => weekday(r) >= 6],
+      ['Morning 6–12', r => hour(r) >= 6 && hour(r) < 12], ['Afternoon 12–18', r => hour(r) >= 12 && hour(r) < 18],
+      ['Evening and night', r => hour(r) >= 18 || hour(r) < 6],
+      ['Sri Lankan number', r => phoneKey(r).indexOf('94') === 0], ['Overseas number', r => !!phoneKey(r) && phoneKey(r).indexOf('94') !== 0],
+      ['Price under 50M', r => price(r) > 0 && price(r) < 5e7], ['Price 50–150M', r => price(r) >= 5e7 && price(r) <= 1.5e8],
+      ['Price over 150M', r => price(r) > 1.5e8],
+      ['Agent replied within 1 hour', r => replied(r) !== null && replied(r) <= 1], ['Agent replied later', r => replied(r) !== null && replied(r) > 1]]],
+  ];
+  const line = item => {
+    const group = decided.filter(item[1]);
+    if (!group.length) return '';
+    const won = group.filter(positive).length;
+    return '• ' + item[0] + ': ' + Math.round(won * 100 / group.length) + '% (' + won + ' of ' + group.length + ')';
+  };
+  const sections = groups.map(g => { const lines = g[1].map(line).filter(Boolean); return lines.length ? '<b>' + g[0] + '</b>\n' + lines.join('\n') : ''; }).filter(Boolean);
+  const parts = ['📊 <b>Weekly lead report</b>',
+    'This week: ' + week.length + ' leads (🔥 ' + priority('HOT') + ' · 🟡 ' + priority('WARM') + ' · 🔵 ' + priority('COLD') + ')' + (weekSpam ? ' · 🚫 ' + weekSpam + ' spam' : ''),
+    'All time: 🏠 ' + (outcome('viewing booked') + outcome('viewing done')) + ' viewings · 🤝 ' + outcome('deal') + ' deals · ❌ ' + outcome('not interested')
+      + ' not interested · 💤 ' + outcome('no response') + ' no response · ⏳ ' + (leads.length - decided.length) + ' open'];
+  if (sections.length) parts.push('<b>Became a viewing or deal</b>\n\n' + sections.join('\n\n'));
+  else parts.push('No outcomes yet. Use the buttons on lead alerts so this report can learn what works.');
+  if (decided.length < 30) parts.push('⚠️ Early signs only: ' + decided.length + ' lead(s) with an outcome so far. Patterns become reliable after about 100.');
+  return parts.join('\n\n').slice(0, 4000);
+}
+
+function dhLeadWeeklyReport_() {
+  if (dhTelegramDisabled_()) { log('', 'DEV_LEAD_REPORT_SKIPPED'); return; }
+  tg('sendMessage', { chat_id: dhLeadChat_(), text: dhLeadReportText_(dhLeadRows_(dhLeadSheet_())), parse_mode: 'HTML', disable_web_page_preview: true });
+}
+
+/** Runs every fifth minute via action "lead_digest": outcome check once a day, the evening COLD digest,
+ *  and the learning report on Mondays from 09:00 Sri Lanka time. Each part runs once per period. */
+function dhLeadMaintenance_() {
+  const props = PropertiesService.getScriptProperties();
+  const pre = DH_VIEWING_CONTEXT_ === 'production' ? 'LIVE_' : '';
+  const today = Utilities.formatDate(new Date(), 'Asia/Colombo', 'yyyy-MM-dd');
+  let processed = 0, errors = 0;
+  if (props.getProperty(pre + 'LEAD_OUTCOME_DATE') !== today) {
+    try { processed += dhLeadOutcomes_(); props.setProperty(pre + 'LEAD_OUTCOME_DATE', today); }
+    catch (e) { errors++; log('', 'LEAD_OUTCOMES_FAILED'); }
+  }
+  const digest = dhLeadDigest_();
+  processed += digest.processed; errors += digest.errors;
+  const week = Utilities.formatDate(new Date(), 'Asia/Colombo', "YYYY-'W'ww");
+  if (Utilities.formatDate(new Date(), 'Asia/Colombo', 'u') === '1' &&
+      Number(Utilities.formatDate(new Date(), 'Asia/Colombo', 'H')) >= DH_LEAD_REPORT_HOUR && props.getProperty(pre + 'LEAD_REPORT_WEEK') !== week) {
+    try { dhLeadWeeklyReport_(); props.setProperty(pre + 'LEAD_REPORT_WEEK', week); processed++; }
+    catch (e) { errors++; log('', 'LEAD_REPORT_FAILED'); }
+  }
+  return { processed, errors };
 }
