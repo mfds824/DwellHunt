@@ -1,4 +1,4 @@
-export type GatewayAction = "intake" | "telegram" | "customer_action" | "reminders" | "followup" | "lead" |
+export type GatewayAction = "intake" | "telegram" | "customer_action" | "reminders" | "followup" | "lead" | "lead_digest" |
  "viewing_health" | "listing_tracking_health" | "listing_sheet_sync" | "listing_reminder" | "listing_reminder_lookup";
 export type Payload = Record<string, unknown>;
 export type SafeResponse = { ok: boolean; httpStatus: number; [key: string]: unknown };
@@ -25,7 +25,7 @@ export function buildGatewayRequest(action: GatewayAction, payload: Payload) {
     method: "POST",
     headers: { ...headers as Record<string, string>, "Content-Type": "application/json" },
     body: JSON.stringify({ ...auth, action, payload,
-      ...(["intake","telegram","customer_action","reminders","followup","viewing_health","lead"].includes(action)
+      ...(["intake","telegram","customer_action","reminders","followup","viewing_health","lead","lead_digest"].includes(action)
         ? {environment: process.env.DWELLHUNT_GATEWAY_ENVIRONMENT === "production" ? "production" : "development"} : {}),
     }),
     signal: AbortSignal.timeout(60_000),

@@ -141,6 +141,7 @@ async function triggerAndWait(taskId: string, payload: Record<string, unknown>, 
 
 const GATEWAY_ACTIONS: Record<string, string> = {
   "dwellhunt-new-lead": "lead",
+  "dwellhunt-lead-digest": "lead_digest",
   "dwellhunt-viewing-booking": "intake",
   "dwellhunt-viewing-agent-approval": "telegram",
   "dwellhunt-viewing-buyer-actions": "customer_action",
@@ -207,7 +208,10 @@ function failureCode(error: unknown) {
 }
 
 async function runMaintenanceDirect(scheduledTime: number, env: Env) {
-  for (const taskId of maintenanceTasksAt(scheduledTime)) {
+  // The COLD-lead digest is checked every fifth minute; Apps Script sends it once a day after 18:00 Sri Lanka time.
+  const tasks = [...maintenanceTasksAt(scheduledTime),
+    ...(Math.floor(scheduledTime / 60_000) % 5 === 0 ? ["dwellhunt-lead-digest"] : [])];
+  for (const taskId of tasks) {
     const action = GATEWAY_ACTIONS[taskId];
     try {
       const result = await callAppsScript(action, {}, env);

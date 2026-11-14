@@ -427,7 +427,7 @@ test("direct mode timer runs reminders every minute and follow-up every fifth mi
     worker.scheduled({ scheduledTime: 300_000 }, directEnv, { waitUntil: p => { pending.push(p); } });
     worker.scheduled({ scheduledTime: 360_000 }, directEnv, { waitUntil: p => { pending.push(p); } });
     await Promise.all(pending);
-    assert.deepEqual(calls.map(c => c.body.action).sort(), ["followup", "reminders", "reminders"]);
+    assert.deepEqual(calls.map(c => c.body.action).sort(), ["followup", "lead_digest", "reminders", "reminders"]);
     assert.ok(calls.every(c => c.url === directEnv.APPS_SCRIPT_EXEC_URL && c.body.environment === "development"));
     calls.length = 0;
     worker.scheduled({ scheduledTime: 300_000 }, { ...directEnv, AUTOMATION_ENABLED: "false" }, { waitUntil: p => { pending.push(p); } });
