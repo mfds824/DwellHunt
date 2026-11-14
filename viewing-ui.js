@@ -67,6 +67,7 @@
     <p class="dh-hint">Feedback is available after your viewing is marked completed. To reschedule, cancel and submit a new request.</p></fieldset>`;
   function open({ property, management, trigger }) {
     if (document.getElementById('dh-viewing')) return;
+    if(!management && Array.isArray(window.DWELLHUNT_VIEWING?.availablePropertyIds) && !window.DWELLHUNT_VIEWING.availablePropertyIds.includes(property.id)){toast('Virtual viewing is not available for this property.');return;}
     const dialog = document.createElement('dialog'); dialog.id = 'dh-viewing';
     dialog.setAttribute('aria-labelledby', 'dh-viewing-heading');
     dialog.innerHTML = `<header class="dh-form-header"><div class="dh-eyebrow">${icon}<span>DWELLHUNT VIRTUAL VIEWINGS</span></div><button class="dh-close" type="button" aria-label="Close booking form">×</button>
@@ -111,7 +112,7 @@
     try {
       endpoint = new URL(management ? config.buyerActionsUrl : config.bookingUrl);
       const path = management ? '/api/dwellhunt/buyer-actions' : '/api/dwellhunt/bookings';
-      if (endpoint.protocol !== 'https:' || endpoint.hostname !== 'dwellhunt-viewing-api-dev.countdracula-11537.workers.dev' || endpoint.pathname !== path || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || !config.turnstileSiteKey) throw Error();
+      if (endpoint.protocol !== 'https:' || !['dwellhunt-viewing-api-dev.countdracula-11537.workers.dev','dwellhunt-viewing-api-production.countdracula-11537.workers.dev'].includes(endpoint.hostname) || endpoint.pathname !== path || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || !config.turnstileSiteKey) throw Error();
     } catch { message('This form is awaiting configuration. Please contact DwellHunt.'); return; }
     refresh.onclick = () => { token = ''; update(); try { if (widget !== undefined) window.turnstile.reset(widget); else { loader = null; renderCaptcha(); } } catch { message('Verification could not refresh. Close and reopen this form.', 'verification'); } };
     function renderCaptcha() { loadCaptcha().then(api => {
