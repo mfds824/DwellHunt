@@ -42,15 +42,45 @@ export function comparisonPriceLKR(p) {
   const factor = { month: 1, monthly: 1, year: 1 / 12, yearly: 1 / 12, week: 52 / 12, weekly: 52 / 12, night: 365 / 12, nightly: 365 / 12, day: 365 / 12, daily: 365 / 12 }[rentalPeriod(p)];
   return factor ? price * factor : null;
 }
+// Colombo postal zones, offered as search suggestions even before listings exist there.
+export const COLOMBO_AREAS = [
+  ['01', 'Fort'], ['02', 'Slave Island'], ['03', 'Kollupitiya'], ['04', 'Bambalapitiya'], ['05', 'Havelock Town'],
+  ['06', 'Wellawatte'], ['07', 'Cinnamon Gardens'], ['08', 'Borella'], ['09', 'Dematagoda'], ['10', 'Maradana'],
+  ['11', 'Pettah'], ['12', 'Hulftsdorp'], ['13', 'Kotahena'], ['14', 'Grandpass'], ['15', 'Mattakkuliya'],
+].map(([zone, area]) => ({ zone: `Colombo ${zone}`, area, label: `Colombo ${zone} (${area})` }));
+/** Lower-cases, drops "(area)" notes and punctuation, and writes "Colombo 7", "col 7" or "Colombo-07" as "colombo 07". */
+export function normalizeLocation(text) {
+  return String(text || '').toLowerCase().replace(/\([^)]*\)/g, ' ').replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(?:colombo|col|cmb)\s*0?(1[0-5]|[1-9])\b/g, (_, n) => `colombo ${n.padStart(2, '0')}`)
+    .replace(/\s+/g, ' ').trim();
+}
+/** The text to keep after a suggestion is chosen: "Colombo 07 (Cinnamon Gardens)" becomes "Colombo 07". */
+export const locationQuery = text => String(text || '').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+/** Suggestions: every Colombo zone plus the other places that have listings. */
+export function locationSuggestions(cities) {
+  const zones = new Set(COLOMBO_AREAS.map(a => normalizeLocation(a.zone)));
+  const others = [...new Set(cities.filter(Boolean))].filter(city => !zones.has(normalizeLocation(city))).sort();
+  return [...COLOMBO_AREAS.map(a => a.label), ...others];
+}
+export function matchesLocation(p, query, cities = []) {
+  const q = normalizeLocation(query);
+  if (!q) return true;
+  // A full place name that has listings (e.g. "Galle") matches that city only, not "Galle Road" addresses.
+  if (cities.some(city => normalizeLocation(city) === q)) return normalizeLocation(p.city) === q;
+  const area = COLOMBO_AREAS.find(a => normalizeLocation(a.area) === q);
+  const text = normalizeLocation([p.city, p.district, p.address, p.title].filter(Boolean).join(' | '));
+  return text.includes(q) || (!!area && text.includes(normalizeLocation(area.zone)));
+}
 export function filterHomeListings(properties, filters, isSaved = () => false) {
   if (budgetError(filters.minPrice, filters.maxPrice, filters.purpose)) return [];
   const min = budgetValue(filters.minPrice, filters.purpose), max = budgetValue(filters.maxPrice, filters.purpose);
   const under = selectedBudgetPreset(filters.minPrice, filters.maxPrice, filters.purpose).startsWith('under');
+  const cities = [...new Set(properties.map(p => p.city).filter(Boolean))];
   return properties.filter(p => {
     const price = comparisonPriceLKR(p);
     return p.purpose === filters.purpose &&
       (filters.category === 'all' || p.category === filters.category) &&
-      (!filters.savedOnly || isSaved(p.id)) && (!filters.location || p.city === filters.location) &&
+      (!filters.savedOnly || isSaved(p.id)) && matchesLocation(p, filters.location, cities) &&
       (filters.bedrooms === 'any' || Number(p.bedrooms) >= Number(filters.bedrooms)) &&
       (min === null || price !== null && price >= min) && (max === null || price !== null && (under ? price < max : price <= max));
   });
