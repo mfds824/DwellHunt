@@ -971,3 +971,12 @@
 @media (max-width: 399px) {
   .dh-price-controls { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 }
+
+/* Enquiry form honeypot: hidden from people and screen readers, still present for bots that fill every field. */
+.dh-hp {
+  position: absolute !important;
+  left: -10000px !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
