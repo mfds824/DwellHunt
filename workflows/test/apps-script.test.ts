@@ -212,7 +212,10 @@ function leadHarness(settings: Record<string,string|undefined> = {}) {
   const rows: unknown[][] = [];
   const sent: { telegram: any[]; email: any[]; logs: string[]; sheets: string[] } = { telegram: [], email: [], logs: [], sheets: [] };
   let n = 0;
-  c.Utilities = { getUuid: () => `0000-0000-0000-${String(++n).padStart(4, '0')}` };
+  c.Utilities = { getUuid: () => `0000-0000-0000-${String(++n).padStart(4, '0')}`,
+    formatDate: (d: Date) => d.toISOString().slice(0, 10) };
+  c.SpreadsheetApp = { openById: () => ({ getSheetByName: () => null }) };
+  c.all = () => [];
   c.sheet = (name: string, cols: string[]) => { sent.sheets.push(name + '@' + c.cfg('SPREADSHEET_ID')); return {
     getLastRow: () => rows.length + 1,
     getRange: (row: number, col: number, numRows?: number, numCols?: number) => ({
@@ -224,31 +227,77 @@ function leadHarness(settings: Record<string,string|undefined> = {}) {
   c.tg = (_m: string, data: any) => { sent.telegram.push(data); return {}; };
   c.MailApp = { sendEmail: (m: any) => { sent.email.push(m); } };
   c.log = (_id: string, code: string) => sent.logs.push(code);
-  return { c, rows, sent, cols: c.DH_LEAD_COLUMNS as string[] };
+  const rowOf = (i = rows.length - 1) => Object.fromEntries((c.DH_LEAD_COLUMNS as string[]).map((k, j) => [k, rows[i][j]]));
+  return { c, rows, sent, rowOf };
 }
+const inDays = (d: number) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 10);
 const goodLead = { customer_name: 'Test Buyer', email: 'Buyer@Example.test', phone: '+94770000000', enquiry_type: 'schedule_tour',
   property: 'Demo Villa', property_id: 'prop-demo', location: 'Colombo 07', budget: '425000000',
-  message: 'Please arrange a viewing this week', preferred_date: '2026-11-20', consent: true };
+  message: 'Is the price negotiable? I can view it on Friday.', preferred_date: inDays(3), consent: true };
+const templateLead = { ...goodLead, enquiry_type: 'general', phone: '', preferred_date: '',
+  message: 'Hello, I am interested in "Demo Villa". Please send more details regarding title deeds and schedule a viewing.' };
 
-test('Production lead is stored in the live sheet, scored and announced once to the live chat and buyer', () => {
-  const { c, rows, sent, cols } = leadHarness();
+test('Production lead is stored in the live sheet, scored from buyer actions and announced once', () => {
+  const { c, rows, sent, rowOf } = leadHarness();
   c.DH_VIEWING_CONTEXT_ = 'production';
   const r = c.dhLead_({ ...goodLead });
   assert.equal(r.status, 'received'); assert.equal(r.duplicate, false);
   assert.deepEqual(sent.sheets, ['DwellHunt_Leads@live-sheet']);
-  assert.equal(rows.length, 1);
-  const row = Object.fromEntries(cols.map((k, i) => [k, rows[0][i]]));
-  assert.equal(row['Email'], 'buyer@example.test'); assert.equal(row['Ai lead priority'], 'HOT'); assert.equal(row['Lead Status'], 'new');
-  assert.equal(sent.telegram.length, 1); assert.equal(sent.telegram[0].chat_id, 'live-chat'); assert.match(sent.telegram[0].text, /HOT LEAD/);
-  assert.equal(sent.email.length, 1); assert.equal(sent.email[0].to, 'buyer@example.test'); assert.match(sent.email[0].subject, /received your DwellHunt enquiry/);
-  assert.notEqual(row['Telegram Sent'], 'failed'); assert.notEqual(row['Confirmation Email Sent'], '');
+  const row = rowOf();
+  assert.equal(row['Email'], 'buyer@example.test'); assert.equal(Number(row['Ai lead score']), 65); assert.equal(row['Ai lead priority'], 'HOT');
+  assert.match(String(row['Ai lead reason']), /Schedule Tour \(\+20\).*own message \(\+20\).*3 day\(s\) \(\+15\).*phone\/WhatsApp number \(\+10\)/);
+  assert.equal(row['Score Version'], 'v2'); assert.equal(row['Lead Status'], 'new');
+  assert.equal(sent.telegram.length, 1); assert.equal(sent.telegram[0].chat_id, 'live-chat');
+  assert.match(sent.telegram[0].text, /HOT LEAD \(score 65\)[\s\S]*Why:/);
+  assert.equal(sent.email.length, 1); assert.equal(sent.email[0].to, 'buyer@example.test');
   const again = c.dhLead_({ ...goodLead });
   assert.equal(again.duplicate, true); assert.equal(rows.length, 1); assert.equal(sent.telegram.length, 1); assert.equal(sent.email.length, 1);
   c.DH_VIEWING_CONTEXT_ = '';
 });
 
+test('Template-only enquiries score nothing; old, new and empty messages are all treated as templates', () => {
+  const { c, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...templateLead });
+  assert.equal(Number(rowOf()['Ai lead score']), 0); assert.equal(rowOf()['Ai lead priority'], 'COLD');
+  assert.equal(c.dhLeadIsTemplate_('Hello, I’m interested in “Demo Villa”. Please send me more details.', 'Demo Villa'), true);
+  assert.equal(c.dhLeadIsTemplate_('Hello, I\'d like to arrange a viewing of "Demo Villa".', 'Demo Villa'), true);
+  assert.equal(c.dhLeadIsTemplate_('', 'Demo Villa'), true);
+  assert.equal(c.dhLeadIsTemplate_('Hello, I am interested in "Demo Villa". Is parking included?', 'Demo Villa'), false);
+  c.dhLead_({ ...templateLead, property_id: 'p2', phone: '+94771111111', message: 'Is the price negotiable?' });
+  assert.equal(Number(rowOf()['Ai lead score']), 40); assert.equal(rowOf()['Ai lead priority'], 'WARM');
+  assert.match(String(rowOf()['Ai lead reason']), /Enquired before \(\+10\)/);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Low-urgency wording lowers the score; an existing viewing booking raises it; far dates count less', () => {
+  const { c, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...templateLead, email: 'a@example.test', message: 'Just browsing for now, maybe next year.' });
+  assert.equal(Number(rowOf()['Ai lead score']), 0); assert.match(String(rowOf()['Ai lead reason']), /low urgency \(-20\)/);
+  c.all = () => [{ email: 'b@example.test', booking_status: 'confirmed' }];
+  c.dhLead_({ ...templateLead, email: 'B@example.test' });
+  assert.equal(Number(rowOf()['Ai lead score']), 25); assert.match(String(rowOf()['Ai lead reason']), /Already booked a virtual viewing \(\+25\)/);
+  c.dhLead_({ ...goodLead, email: 'c@example.test', preferred_date: inDays(45) });
+  assert.equal(Number(rowOf()['Ai lead score']), 53); assert.equal(rowOf()['Ai lead priority'], 'WARM');
+  c.all = () => { throw new Error('state unavailable'); };
+  assert.equal(c.dhLead_({ ...goodLead, email: 'd@example.test' }).status, 'received');
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Links or disposable emails are stored as SPAM without alerts or emails', () => {
+  const { c, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...goodLead, message: 'Cheap loans at https://spam.example.test' });
+  assert.equal(rowOf()['Ai lead priority'], 'SPAM'); assert.equal(rowOf()['Lead Status'], 'spam');
+  c.dhLead_({ ...goodLead, email: 'x@mailinator.com', property_id: 'p3' });
+  assert.equal(rowOf()['Ai lead priority'], 'SPAM');
+  assert.equal(sent.telegram.length, 0); assert.equal(sent.email.length, 0);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
 test('Lead requires consent and a valid contact, neutralises spreadsheet formulas and survives alert failures', () => {
-  const { c, rows, sent, cols } = leadHarness();
+  const { c, rows, sent, rowOf } = leadHarness();
   c.DH_VIEWING_CONTEXT_ = 'production';
   assert.throws(() => c.dhLead_({ ...goodLead, consent: false }), /INVALID_REQUEST/);
   assert.throws(() => c.dhLead_({ ...goodLead, email: '', phone: '' }), /INVALID_REQUEST/);
@@ -256,19 +305,26 @@ test('Lead requires consent and a valid contact, neutralises spreadsheet formula
   assert.equal(rows.length, 0);
   c.tg = () => { throw new Error('telegram down'); };
   c.MailApp = { sendEmail: () => { throw new Error('quota'); } };
-  const r = c.dhLead_({ ...goodLead, customer_name: '=HYPERLINK("x")', message: 'hello' });
-  assert.equal(r.status, 'received');
-  const row = Object.fromEntries(cols.map((k, i) => [k, rows[0][i]]));
-  assert.equal(String(row['Customer Name']).startsWith("'="), true);
-  assert.equal(row['Telegram Sent'], 'failed'); assert.equal(row['Confirmation Email Sent'], 'failed');
+  assert.equal(c.dhLead_({ ...goodLead, customer_name: '=HYPERLINK("x")' }).status, 'received');
+  assert.equal(String(rowOf()['Customer Name']).startsWith("'="), true);
+  assert.equal(rowOf()['Telegram Sent'], 'failed'); assert.equal(rowOf()['Confirmation Email Sent'], 'failed');
   assert.ok(sent.logs.includes('LEAD_TELEGRAM_FAILED') && sent.logs.includes('LEAD_EMAIL_FAILED'));
   c.DH_VIEWING_CONTEXT_ = '';
 });
 
+test('An existing 22-column leads sheet gains the Score Version header', () => {
+  const { c } = leadHarness();
+  const older = (c.DH_LEAD_COLUMNS as string[]).slice(0, -1);
+  const writes: [number, number, unknown][] = [];
+  c.SpreadsheetApp = { openById: () => ({ getSheetByName: () => ({ getLastColumn: () => older.length,
+    getRange: (r: number, col: number) => ({ getDisplayValues: () => [older], setValue: (v: unknown) => writes.push([r, col, v]) }) }) }) };
+  c.dhLeadSheet_();
+  assert.deepEqual(writes, [[1, 23, 'Score Version']]);
+});
+
 test('Development lead uses the test sheet and chat and never emails an unrelated address', () => {
   const { c, sent } = leadHarness();
-  const r = c.dhLead_({ ...goodLead, email: 'stranger@example.test' });
-  assert.equal(r.status, 'received');
+  assert.equal(c.dhLead_({ ...goodLead, email: 'stranger@example.test' }).status, 'received');
   assert.deepEqual(sent.sheets, ['DwellHunt_Leads@test-sheet']);
   assert.equal(sent.telegram[0].chat_id, 'dev-chat');
   assert.equal(sent.email.length, 0); assert.ok(sent.logs.includes('DEV_LEAD_EMAIL_SKIPPED'));
