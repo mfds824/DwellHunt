@@ -63,3 +63,27 @@ test('homepage preset edits, reset, validation, counts and sorting retain indepe
   ui.button('Buy').props.onClick(); ui.render(); assert.equal(ui.byId('dh-min-price').props.value, '');
   assert.equal(ui.nodes().filter(n => n.props.type === 'range').length, 0); assert.equal(ui.nodes().filter(n => n.props.className === 'dh-layout-toggle').length, 0);
 });
+
+test('location search accepts Colombo zone spellings, area names and suggestion labels', async () => {
+  const { normalizeLocation, locationQuery, locationSuggestions, matchesLocation, COLOMBO_AREAS } = await import('../website/homepage-search.js');
+  assert.equal(COLOMBO_AREAS.length, 15);
+  for (const text of ['Colombo 7', 'colombo-07', 'Col 7', 'COLOMBO 07 (Cinnamon Gardens)']) assert.equal(normalizeLocation(text), 'colombo 07');
+  assert.equal(normalizeLocation('Colombo 15'), 'colombo 15');
+  assert.equal(locationQuery('Colombo 03 (Kollupitiya)'), 'Colombo 03');
+  const suggestions = locationSuggestions(['Galle', 'Colombo 03', 'Kandy']);
+  assert.equal(suggestions[0], 'Colombo 01 (Fort)');
+  assert.equal(suggestions[14], 'Colombo 15 (Mattakkuliya)');
+  assert.deepEqual(suggestions.slice(15), ['Galle', 'Kandy']);
+  const homes = [
+    { city: 'Colombo 07', district: 'Colombo', address: 'Cinnamon Gardens', title: 'Villa' },
+    { city: 'Colombo 03', district: 'Colombo', address: 'Galle Road', title: 'Flat' },
+    { city: 'Galle', district: 'Galle', address: 'Lighthouse Street', title: 'House' },
+  ];
+  const cities = homes.map(p => p.city);
+  const find = q => homes.filter(p => matchesLocation(p, q, cities)).map(p => p.city);
+  assert.deepEqual(find('colombo 7'), ['Colombo 07']);
+  assert.deepEqual(find('Kollupitiya'), ['Colombo 03']);
+  assert.deepEqual(find('Galle'), ['Galle']);
+  assert.deepEqual(find('colombo'), ['Colombo 07', 'Colombo 03']);
+  assert.deepEqual(find(''), ['Colombo 07', 'Colombo 03', 'Galle']);
+});

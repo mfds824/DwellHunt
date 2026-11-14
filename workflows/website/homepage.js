@@ -1,4 +1,4 @@
-import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings } from "./homepage-search.js";
+import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings, locationSuggestions, locationQuery } from "./homepage-search.js";
 // Homepage presentation only. Marketplace state, routes and integrations remain in app.js.
 export function createHomepage(
   React,
@@ -315,7 +315,7 @@ export function createHomepage(
       event.preventDefault();
       if (budgetProblem) return;
       store.setFilters({
-        ...defaults, purpose, location,
+        ...defaults, purpose, location: locationQuery(location),
         minPrice: budgetValue(minPrice, purpose), maxPrice: budgetValue(maxPrice, purpose),
         bedrooms, category, sortBy,
       });
@@ -452,10 +452,29 @@ export function createHomepage(
             h(
               "div",
               { className: "dh-filter-grid" },
-              select("dh-location", "Location", location, setLocation, [
-                ["", "Any location"],
-                ...cities.map((city) => [city, city]),
-              ]),
+              h(
+                "label",
+                { htmlFor: "dh-location" },
+                "Location",
+                h("input", {
+                  id: "dh-location",
+                  type: "search",
+                  value: location,
+                  list: "dh-location-options",
+                  autoComplete: "off",
+                  maxLength: 80,
+                  placeholder: "Search area, e.g. Colombo 07 or Galle",
+                  "aria-label": "Location",
+                  onChange: (event) => setLocation(event.target.value),
+                }),
+                h(
+                  "datalist",
+                  { id: "dh-location-options" },
+                  locationSuggestions(cities).map((place) =>
+                    h("option", { key: place, value: place }),
+                  ),
+                ),
+              ),
               select("dh-beds", "Bedrooms", bedrooms, setBedrooms, [
                 ["any", "Any bedrooms"],
                 ["1", "1+ bedrooms"],
