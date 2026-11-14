@@ -286,13 +286,6 @@ export function createHomepage(
   }
   function Home() {
     const store = useMarketplace();
-    const [showSearchShortcut, setShowSearchShortcut] = React.useState(false);
-    React.useEffect(() => {
-      const updateShortcut = () => setShowSearchShortcut(window.scrollY > 300);
-      updateShortcut();
-      window.addEventListener("scroll", updateShortcut, { passive: true });
-      return () => window.removeEventListener("scroll", updateShortcut);
-    }, []);
     const [purpose, setPurpose] = React.useState("buy");
     const [brief, setBrief] = React.useState("");
     const [location, setLocation] = React.useState("");
@@ -351,20 +344,6 @@ export function createHomepage(
     return h(
       "div",
       { id: "dh-home", className: "dh-home" },
-      showSearchShortcut &&
-        h(
-          "a",
-          {
-            href: "#dh-ai-prompt",
-            className: "dh-button dh-floating-search",
-            "aria-label": "Return to home search",
-            onClick: () =>
-              document
-                .getElementById("dh-ai-prompt")
-                ?.focus({ preventScroll: true }),
-          },
-          "Find a home",
-        ),
       h(
         "section",
         { className: "dh-hero", "aria-labelledby": "dh-motto" },

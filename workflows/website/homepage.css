@@ -878,15 +878,6 @@
   font-weight: 700;
   cursor: pointer;
 }
-.dh-floating-search {
-  position: fixed;
-  left: 20px;
-  bottom: 20px;
-  z-index: 40;
-  box-shadow: 0 5px 24px #17372c38;
-  border: 1px solid #b9cdbd;
-  font-size: 13px;
-}
 .dh-featured-browse {
   justify-self: end;
 }
