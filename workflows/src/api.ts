@@ -28,6 +28,9 @@ export async function dispatch(path: string, payload: unknown, execute: Execute)
     return { status: 400, body: { ok: false, code: "INVALID_PAYLOAD" } };
   const data = payload as Payload;
   if (taskId === "dwellhunt-new-lead") {
+    // Hidden "website" field: people never see it, form-filling bots do. Accept quietly, never enqueue.
+    if (typeof data.website === "string" && data.website.trim()) return { status: 200, body: { ok: true } };
+    delete data.website;
     try { scoreLead(data); } catch { return { status: 400, body: { ok: false, code: "CONTACT_REQUIRED" } }; }
   }
   // Payload identity ensures an ambiguous client retry reuses its existing run.

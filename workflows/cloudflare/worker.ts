@@ -237,6 +237,11 @@ export default {
       delete data["cf-turnstile-response"];
       }
     }
+    if (taskId === "dwellhunt-new-lead") {
+      // Hidden "website" honeypot field: a filled value means a bot. Reply as if accepted and enqueue nothing.
+      if (typeof data.website === "string" && data.website.trim()) return json({ ok: true }, 200, cors);
+      delete data.website;
+    }
     if (taskId === "dwellhunt-new-lead" &&
         !(typeof data.email === "string" && data.email.trim()) &&
         !(typeof data.phone === "string" && data.phone.trim()))

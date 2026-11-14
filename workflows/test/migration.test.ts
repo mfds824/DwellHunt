@@ -137,6 +137,41 @@ test("invalid requests do not enqueue tasks", async () => {
   assert.equal((await dispatch("/missing", {}, execute)).status, 404);
 });
 
+test("lead honeypot submissions are accepted quietly and never enqueued", async () => {
+  const execute = async () => { throw new Error("must not execute"); };
+  const result = await dispatch("/api/dwellhunt/leads", { email: "bot@example.test", website: "https://spam.example.test" }, execute);
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, { ok: true });
+  let received: Record<string, unknown> | undefined;
+  const ok = await dispatch("/api/dwellhunt/leads", { email: "buyer@example.test", website: "" },
+    async (_id, payload) => { received = payload; return { duplicate: false, priority: "COLD" }; });
+  assert.equal(ok.status, 200);
+  assert.equal(received && "website" in received, false);
+});
+
+test("Worker drops a filled lead honeypot after human verification without starting a task", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = async (input) => {
+    const url = String(input); calls.push(url);
+    if (url.includes("siteverify")) return Response.json({ success: true, hostname: "development.dwellhunt-viewing-dev.pages.dev", action: "lead" });
+    throw new Error("must not reach Trigger.dev");
+  };
+  try {
+    const response = await worker.fetch(new Request("https://api.example.test/api/dwellhunt/leads", {
+      method: "POST", headers: { Origin: "https://development.dwellhunt-viewing-dev.pages.dev", "Content-Type": "text/plain" },
+      body: JSON.stringify({ turnstile_token: "dummy-token", email: "bot@example.test", website: "filled" }) }), {
+      TRIGGER_SECRET_KEY: "dummy-trigger-secret", WEBSITE_ORIGIN: "https://development.dwellhunt-viewing-dev.pages.dev",
+      TELEGRAM_WEBHOOK_SECRET: "dummy-telegram-secret", TURNSTILE_SECRET_KEY: "dummy-turnstile-secret",
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true });
+    assert.equal(calls.filter(u => !u.includes("siteverify")).length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("booking forwards a fresh Turnstile token for Apps Script to verify exactly once", async () => {
   const originalFetch = globalThis.fetch;
   let forwarded: Record<string, unknown> | undefined;
