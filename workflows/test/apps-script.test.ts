@@ -429,3 +429,45 @@ test('Gateway accepts the lead and lead_digest actions in Production context', (
     assert.equal(r.ok, true); assert.equal(r.context, 'production'); assert.equal(c.DH_VIEWING_CONTEXT_, '');
   }
 });
+
+test('Phone numbers typed differently are recognised as the same person', () => {
+  const { c } = leadHarness();
+  for (const p of ['077 000 0000', '+94 77 000 0000', '0094770000000', '94770000000', '(+94) 77-000-0000'])
+    assert.equal(c.dhLeadPhoneKey_(p), '94770000000');
+  assert.equal(c.dhLeadPhoneKey_('12345'), '');
+  assert.equal(c.dhLeadPhoneKey_('+44 7700 900123'), '447700900123');
+});
+
+test('An exact repeat is dropped, but a new message about the same property becomes a follow-up', () => {
+  const { c, rows, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...goodLead });
+  assert.equal(c.dhLead_({ ...goodLead, message: '  is the PRICE negotiable?? I can view it on Friday ' }).duplicate, true);
+  assert.equal(rows.length, 1);
+  const r = c.dhLead_({ ...goodLead, message: 'Also, is parking included?' });
+  assert.equal(r.duplicate, false); assert.equal(rows.length, 2);
+  assert.equal(rowOf()['Lead Status'], 'follow-up'); assert.equal(rowOf()['Confirmation Email Sent'], 'not sent (follow-up)');
+  assert.equal(sent.email.length, 1);
+  assert.equal(sent.telegram.length, 2);
+  const note = sent.telegram[1].text;
+  assert.match(note, /^💬 <b>Follow-up from Test Buyer<\/b> · 🔥 HOT\n🏠 Demo Villa\n📱 \+94 77 000 0000 · <a href="https:\/\/wa\.me\/94770000000">WhatsApp ↗<\/a>/);
+  assert.match(note, /💬 "Also, is parking included\?"/);
+  assert.equal(sent.telegram[1].reply_markup.inline_keyboard[0].length, 2);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('The same person is matched by email or phone, and template-only repeats stay duplicates', () => {
+  const { c, rows, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...templateLead, email: '', phone: '077 123 4567' });
+  assert.equal(rowOf()['Telegram Sent'], 'digest pending');
+  assert.equal(c.dhLead_({ ...templateLead, email: 'new@example.test', phone: '+94 77 123 4567',
+    message: 'Hello, I\'m interested in "Demo Villa". Please send me more details.' }).duplicate, true);
+  assert.equal(rows.length, 1);
+  c.dhLead_({ ...templateLead, email: 'new@example.test', phone: '+94771234567', message: 'Can I see it this weekend?' });
+  assert.equal(rowOf()['Lead Status'], 'follow-up'); assert.notEqual(rowOf()['Telegram Sent'], 'digest pending');
+  assert.equal(sent.telegram.length, 1); assert.match(sent.telegram[0].text, /^💬 <b>Follow-up from Test Buyer<\/b>/);
+  c.dhLead_({ ...templateLead, email: 'other@example.test', phone: '0771234567', property_id: 'p5', property: 'Other Flat' });
+  assert.equal(rowOf()['Lead Status'], 'new'); assert.match(String(rowOf()['Ai lead reason']), /Enquired before/);
+  c.DH_VIEWING_CONTEXT_ = '';
+});

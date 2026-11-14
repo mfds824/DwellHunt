@@ -74,6 +74,21 @@ function dhLeadSheet_() {
 }
 
 function dhLeadCol_(name) { return DH_LEAD_COLUMNS.indexOf(name); }
+
+/** One comparable form for a phone number: "077 015 3678", "+94 77 015 3678" and "0094770153678" all become 94770153678. */
+function dhLeadPhoneKey_(phone) {
+  let digits = String(phone || '').replace(/[^0-9]/g, '');
+  if (digits.indexOf('00') === 0) digits = digits.slice(2);
+  if (digits.length === 10 && digits.charAt(0) === '0') digits = '94' + digits.slice(1);
+  return digits.length >= 8 ? digits : '';
+}
+
+/** True when two enquiry messages say the same thing (any website templates count as the same). */
+function dhLeadSameMessage_(a, b, title) {
+  if (dhLeadIsTemplate_(a, title) && dhLeadIsTemplate_(b, title)) return true;
+  const n = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return n(a) === n(b);
+}
 /** Sheet rows as text, without the apostrophe safeCell adds in front of values such as "+94…". */
 function dhLeadRows_(s) {
   return s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, DH_LEAD_COLUMNS.length).getDisplayValues()
@@ -98,11 +113,17 @@ function dhLead_(p) {
   const s = dhLeadSheet_();
   const col = dhLeadCol_;
   const dayAgo = Date.now() - 86400000;
-  const mine = dhLeadRows_(s).filter(r => lead.email ? r[col('Email')].toLowerCase() === lead.email : r[col('Phone')] === lead.phone);
+  const phoneKey = dhLeadPhoneKey_(lead.phone);
+  // The same person: same email, or the same phone number however it was typed.
+  const mine = dhLeadRows_(s).filter(r => (lead.email && r[col('Email')].toLowerCase() === lead.email) ||
+    (phoneKey && dhLeadPhoneKey_(r[col('Phone')]) === phoneKey));
   const recent = mine.filter(r => Date.parse(r[col('Date')]) > dayAgo);
-  // A repeat of the same enquiry within a day is acknowledged without a second row, alert or email.
-  if (recent.some(r => r[col('Property ID')] === lead.propertyId)) return { httpStatus: 200, status: 'received', duplicate: true };
+  const sameProperty = recent.filter(r => r[col('Property ID')] === lead.propertyId);
+  // Only an exact repeat (same property and same message) within a day is dropped; a new message is a follow-up.
+  if (sameProperty.some(r => dhLeadSameMessage_(r[col('Message')], lead.message, lead.property)))
+    return { httpStatus: 200, status: 'received', duplicate: true };
   if (recent.length >= 5) fail('RATE_LIMITED', 429);
+  const followUp = sameProperty.length > 0;
 
   let hasBooking = false;
   if (lead.email) {
@@ -120,11 +141,11 @@ function dhLead_(p) {
     'Date': at, 'Lead ID': id, 'Customer Name': lead.name, 'Phone': lead.phone, 'Email': lead.email,
     'Customer Type': lead.enquiryType, 'Property': lead.property, 'Property ID': lead.propertyId,
     'Preferred Location': lead.location, 'Budget': lead.budget, 'Preferred Date': lead.preferredDate,
-    'Message': lead.message, 'Source': lead.source, 'Consent At': at, 'Lead Status': spam ? 'spam' : 'new',
+    'Message': lead.message, 'Source': lead.source, 'Consent At': at, 'Lead Status': spam ? 'spam' : followUp ? 'follow-up' : 'new',
     'Ai lead score': scored.score, 'Ai lead priority': scored.priority, 'Ai lead reason': scored.reason,
     'Ai next action': scored.next, 'Ai analyzed at': at,
-    'Telegram Sent': spam ? 'not sent (spam)' : cold ? DH_LEAD_DIGEST_PENDING : '',
-    'Confirmation Email Sent': spam ? 'not sent (spam)' : '', 'Score Version': DH_LEAD_SCORE_VERSION,
+    'Telegram Sent': spam ? 'not sent (spam)' : cold && !followUp ? DH_LEAD_DIGEST_PENDING : '',
+    'Confirmation Email Sent': spam ? 'not sent (spam)' : followUp ? 'not sent (follow-up)' : '', 'Score Version': DH_LEAD_SCORE_VERSION,
     'Alert Key': spam ? '' : key, 'Status Updated At': '',
   };
   s.appendRow(DH_LEAD_COLUMNS.map(k => safeCell(record[k])));
@@ -132,7 +153,12 @@ function dhLead_(p) {
   const row = s.getLastRow();
   const mark = (column, value) => { try { s.getRange(row, col(column) + 1).setValue(value); } catch (e) { log(id, 'LEAD_MARK_FAILED'); } };
 
-  // COLD leads wait for the evening digest instead of an instant ping.
+  // A follow-up message is always shown at once, without a second confirmation email.
+  // Other COLD leads wait for the evening digest instead of an instant ping.
+  if (followUp) {
+    mark('Telegram Sent', dhLeadTelegram_(lead, scored, signals, id, key, true));
+    return { httpStatus: 200, status: 'received', duplicate: false, follow_up: true };
+  }
   if (!cold) mark('Telegram Sent', dhLeadTelegram_(lead, scored, signals, id, key));
   mark('Confirmation Email Sent', dhLeadEmail_(lead, id));
   return { httpStatus: 200, status: 'received', duplicate: false };
@@ -178,10 +204,21 @@ function dhLeadButtons_(id, key) {
     { text: '❌ Not interested', callback_data: 'L|' + id + '|' + key + '|n' }]] };
 }
 
-function dhLeadTelegram_(lead, scored, signals, id, key) {
+/** Short note for a new message from someone who already enquired about the same property today. */
+function dhLeadFollowUpText_(lead, scored) {
+  const h = dhLeadHtml_;
+  const style = DH_LEAD_STYLE[scored.priority] || DH_LEAD_STYLE.COLD;
+  return ['💬 <b>Follow-up from ' + h(lead.name) + '</b> · ' + style[0] + ' ' + scored.priority,
+    '🏠 ' + h(lead.property || 'General enquiry'),
+    lead.phone ? '📱 ' + h(lead.phone) + dhLeadWhatsApp_(lead.phone) : '✉️ ' + h(lead.email),
+    '', '💬 "' + h(lead.message.length > 300 ? lead.message.slice(0, 297) + '…' : lead.message) + '"',
+    '', '🕒 ' + Utilities.formatDate(new Date(), 'Asia/Colombo', 'd MMM, h:mm a')].join('\n').slice(0, 4000);
+}
+
+function dhLeadTelegram_(lead, scored, signals, id, key, followUp) {
   if (dhTelegramDisabled_()) { log(id, 'DEV_LEAD_TELEGRAM_SKIPPED'); return 'skipped'; }
   try {
-    tg('sendMessage', { chat_id: dhLeadChat_(), text: dhLeadAlertText_(lead, scored, signals), parse_mode: 'HTML',
+    tg('sendMessage', { chat_id: dhLeadChat_(), text: followUp ? dhLeadFollowUpText_(lead, scored) : dhLeadAlertText_(lead, scored, signals), parse_mode: 'HTML',
       disable_web_page_preview: true, reply_markup: dhLeadButtons_(id, key) });
     return now();
   } catch (e) { log(id, 'LEAD_TELEGRAM_FAILED'); return 'failed'; }
