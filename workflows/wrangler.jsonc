@@ -39,9 +39,9 @@
       "workers_dev": true,
       "vars": {
         "WEBSITE_ORIGIN": "https://mfds824.github.io",
-        "AUTOMATION_ENABLED": "false",
+        "AUTOMATION_ENABLED": "true",
         "AUTOMATION_ENVIRONMENT": "production",
-        "PUBLIC_BOOKINGS_ENABLED": "false",
+        "PUBLIC_BOOKINGS_ENABLED": "true",
         "VIEWING_BACKEND": "apps-script"
       },
       "observability": {
@@ -65,7 +65,9 @@
         ]
       },
       "triggers": {
-        "crons": []
+        "crons": [
+          "* * * * *"
+        ]
       }
     }
   },
