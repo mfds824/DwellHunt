@@ -341,3 +341,96 @@ test('Production bookings fail closed until the explicit launch gate is enabled'
  const r=await worker.fetch(new Request('https://api.example.test/api/dwellhunt/bookings',{method:'POST',headers:{Origin:'https://mfds824.github.io','Content-Type':'application/json'},body:'{}'}),{TRIGGER_SECRET_KEY:'mock',WEBSITE_ORIGIN:'https://mfds824.github.io',AUTOMATION_ENVIRONMENT:'production',PUBLIC_BOOKINGS_ENABLED:'false'});
  assert.equal(r.status,503);assert.equal((await r.json() as any).code,'BOOKINGS_NOT_OPEN');
 });
+
+const directEnv = {
+  TRIGGER_SECRET_KEY: "dummy-trigger-secret", WEBSITE_ORIGIN: "https://development.dwellhunt-viewing-dev.pages.dev",
+  TELEGRAM_WEBHOOK_SECRET: "dummy-telegram-secret", TURNSTILE_SECRET_KEY: "dummy-turnstile-secret",
+  AUTOMATION_ENABLED: "true", AUTOMATION_ENVIRONMENT: "development", VIEWING_BACKEND: "apps-script",
+  APPS_SCRIPT_EXEC_URL: "https://script.google.com/macros/s/dummy/exec",
+  APPS_SCRIPT_AUTH_BODY_JSON: JSON.stringify({ gateway_secret: "dummy-gateway-secret" }),
+};
+
+test("direct mode sends a booking straight to Apps Script with a fresh token and never calls Trigger.dev", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: { url: string; body: any }[] = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), body: JSON.parse(String(init?.body)) });
+    return Response.json({ ok: true, httpStatus: 202, booking_id: "dhabc", status: "pending_approval", private: "x" });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://api.example.test/api/dwellhunt/bookings", {
+      method: "POST", headers: { Origin: directEnv.WEBSITE_ORIGIN, "Content-Type": "text/plain" },
+      body: JSON.stringify({ turnstile_token: "fresh-token", property_id: "prop-1", idempotency_key: "k".repeat(20) }) }), directEnv);
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), { ok: true, httpStatus: 202, booking_id: "dhabc", status: "pending_approval" });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, directEnv.APPS_SCRIPT_EXEC_URL);
+    assert.equal(calls[0].body.action, "intake");
+    assert.equal(calls[0].body.environment, "development");
+    assert.equal(calls[0].body.gateway_secret, "dummy-gateway-secret");
+    assert.equal(calls[0].body.payload.turnstile_token, "fresh-token");
+    assert.ok(!calls.some(c => c.url.includes("trigger.dev") || c.url.includes("siteverify")));
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("direct mode hides gateway failures behind a generic 503 and logs only a fixed code", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  const logs: unknown[] = [];
+  console.error = (...args: unknown[]) => { logs.push(args); };
+  try {
+    for (const [reply, code] of [
+      [() => new Response("<html><title>Sign in</title>secret page</html>", { headers: { "content-type": "text/html" } }), "GATEWAY_NON_JSON"],
+      [() => Response.json({ ok: false, code: "SERVICE_UNAVAILABLE", diagnostic_code: "CALENDAR_ACCESS_FAILED", detail: "private" }), "SCRIPT_CALENDAR_ACCESS_FAILED"],
+    ] as const) {
+      globalThis.fetch = async () => reply();
+      const response = await worker.fetch(new Request("https://api.example.test/api/dwellhunt/buyer-actions", {
+        method: "POST", headers: { Origin: directEnv.WEBSITE_ORIGIN, "Content-Type": "application/json" },
+        body: JSON.stringify({ turnstile_token: "fresh-token", booking_id: "dhabc" }) }), directEnv);
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { ok: false, code: "SERVICE_UNAVAILABLE" });
+      const log = JSON.stringify(logs.at(-1));
+      assert.match(log, new RegExp(code));
+      assert.doesNotMatch(log, /secret page|private|fresh-token|dummy-gateway-secret/);
+    }
+    globalThis.fetch = async () => Response.json({});
+    const badConfig = await worker.fetch(new Request("https://api.example.test/api/dwellhunt/bookings", {
+      method: "POST", headers: { Origin: directEnv.WEBSITE_ORIGIN, "Content-Type": "application/json" },
+      body: JSON.stringify({ turnstile_token: "t" }) }), { ...directEnv, APPS_SCRIPT_EXEC_URL: "https://evil.example.test/exec" });
+    assert.equal(badConfig.status, 503);
+    assert.match(JSON.stringify(logs.at(-1)), /CONFIG_EXEC_URL/);
+  } finally { globalThis.fetch = originalFetch; console.error = originalError; }
+});
+
+test("direct mode keeps Telegram secret checks and forwards agent callbacks to Apps Script", async () => {
+  const originalFetch = globalThis.fetch;
+  const actions: string[] = [];
+  globalThis.fetch = async (_input, init) => { actions.push(JSON.parse(String(init?.body)).action); return Response.json({ ok: true, httpStatus: 200, status: "approved" }); };
+  try {
+    const denied = await worker.fetch(new Request("https://api.example.test/api/dwellhunt/agent", {
+      method: "POST", headers: { "Content-Type": "application/json", "x-telegram-bot-api-secret-token": "wrong" }, body: "{}" }), directEnv);
+    assert.equal(denied.status, 401);
+    const ok = await worker.fetch(new Request("https://api.example.test/api/dwellhunt/agent", {
+      method: "POST", headers: { "Content-Type": "application/json", "x-telegram-bot-api-secret-token": "dummy-telegram-secret" },
+      body: JSON.stringify({ callback_query: { id: "1" } }) }), directEnv);
+    assert.equal(ok.status, 200);
+    assert.deepEqual(actions, ["telegram"]);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("direct mode timer runs reminders every minute and follow-up every fifth minute without Trigger.dev", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: { url: string; body: any }[] = [];
+  globalThis.fetch = async (input, init) => { calls.push({ url: String(input), body: JSON.parse(String(init?.body)) }); return Response.json({ ok: true, processed: 1, errors: 0 }); };
+  const pending: Promise<unknown>[] = [];
+  try {
+    worker.scheduled({ scheduledTime: 300_000 }, directEnv, { waitUntil: p => { pending.push(p); } });
+    worker.scheduled({ scheduledTime: 360_000 }, directEnv, { waitUntil: p => { pending.push(p); } });
+    await Promise.all(pending);
+    assert.deepEqual(calls.map(c => c.body.action).sort(), ["followup", "reminders", "reminders"]);
+    assert.ok(calls.every(c => c.url === directEnv.APPS_SCRIPT_EXEC_URL && c.body.environment === "development"));
+    calls.length = 0;
+    worker.scheduled({ scheduledTime: 300_000 }, { ...directEnv, AUTOMATION_ENABLED: "false" }, { waitUntil: p => { pending.push(p); } });
+    assert.equal(calls.length, 0);
+  } finally { globalThis.fetch = originalFetch; }
+});

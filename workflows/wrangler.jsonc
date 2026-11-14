@@ -22,7 +22,8 @@
     "WEBSITE_ORIGIN": "https://development.dwellhunt-viewing-dev.pages.dev",
     "AUTOMATION_ENABLED": "true",
     "AUTOMATION_ENVIRONMENT": "development",
-    "VIEWING_TEST_ORIGIN": "https://mfds824.github.io"
+    "VIEWING_TEST_ORIGIN": "https://mfds824.github.io",
+    "VIEWING_BACKEND": "apps-script"
   },
   "observability": {
     "enabled": true,
@@ -40,7 +41,8 @@
         "WEBSITE_ORIGIN": "https://mfds824.github.io",
         "AUTOMATION_ENABLED": "false",
         "AUTOMATION_ENVIRONMENT": "production",
-        "PUBLIC_BOOKINGS_ENABLED": "false"
+        "PUBLIC_BOOKINGS_ENABLED": "false",
+        "VIEWING_BACKEND": "apps-script"
       },
       "observability": {
         "enabled": true,
@@ -57,7 +59,9 @@
         "required": [
           "TRIGGER_SECRET_KEY",
           "TURNSTILE_SECRET_KEY",
-          "TELEGRAM_WEBHOOK_SECRET"
+          "TELEGRAM_WEBHOOK_SECRET",
+          "APPS_SCRIPT_EXEC_URL",
+          "APPS_SCRIPT_AUTH_BODY_JSON"
         ]
       },
       "triggers": {
@@ -74,7 +78,9 @@
     "required": [
       "TRIGGER_SECRET_KEY",
       "TURNSTILE_SECRET_KEY",
-      "TELEGRAM_WEBHOOK_SECRET"
+      "TELEGRAM_WEBHOOK_SECRET",
+      "APPS_SCRIPT_EXEC_URL",
+      "APPS_SCRIPT_AUTH_BODY_JSON"
     ]
   }
 }

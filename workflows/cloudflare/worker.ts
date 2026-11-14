@@ -1,6 +1,10 @@
 type OptionalBinding = "TELEGRAM_WEBHOOK_SECRET" | "TURNSTILE_SECRET_KEY" |
   "AUTOMATION_ENABLED" | "AUTOMATION_ENVIRONMENT" | "VIEWING_TEST_ORIGIN" | "PUBLIC_BOOKINGS_ENABLED";
-type Env = Omit<WorkerBindings, OptionalBinding> & Partial<Pick<WorkerBindings, OptionalBinding>>;
+// VIEWING_BACKEND=apps-script sends viewing requests and maintenance straight to the Apps Script gateway,
+// so bookings do not depend on Trigger.dev. Leaving it unset keeps the Trigger.dev route.
+type DirectBinding = { VIEWING_BACKEND?: string; APPS_SCRIPT_EXEC_URL?: string;
+  APPS_SCRIPT_AUTH_BODY_JSON?: string; APPS_SCRIPT_AUTH_HEADERS_JSON?: string };
+type Env = Omit<WorkerBindings, OptionalBinding> & Partial<Pick<WorkerBindings, OptionalBinding>> & DirectBinding;
 
 const ROUTES: Record<string, string> = {
   "/api/dwellhunt/leads": "dwellhunt-new-lead",
@@ -135,6 +139,88 @@ async function triggerAndWait(taskId: string, payload: Record<string, unknown>, 
   throw new Error("Task response deadline exceeded");
 }
 
+const GATEWAY_ACTIONS: Record<string, string> = {
+  "dwellhunt-viewing-booking": "intake",
+  "dwellhunt-viewing-agent-approval": "telegram",
+  "dwellhunt-viewing-buyer-actions": "customer_action",
+  "dwellhunt-viewing-reminders-recovery": "reminders",
+  "dwellhunt-viewing-completion-followup": "followup",
+};
+const GATEWAY_TIMEOUT_MS = 60_000;
+
+/** Fixed, value-free reasons. Only these codes are ever logged for gateway failures. */
+export class GatewayFailure extends Error {
+  constructor(readonly code: string) { super(code); this.name = "GatewayFailure"; }
+}
+
+export function usesAppsScriptDirect(env: Pick<Env, "VIEWING_BACKEND">, taskId: string) {
+  return env.VIEWING_BACKEND === "apps-script" && taskId in GATEWAY_ACTIONS;
+}
+
+function jsonObject(value: string | undefined, code: string): Record<string, unknown> {
+  let parsed: unknown;
+  try { parsed = JSON.parse(value || ""); } catch { throw new GatewayFailure(code); }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new GatewayFailure(code);
+  return parsed as Record<string, unknown>;
+}
+
+/** Same contract as src/gateway.ts callGateway, for the Cloudflare runtime. */
+export async function callAppsScript(action: string, payload: Record<string, unknown>, env: Env) {
+  let url: URL;
+  try { url = new URL(env.APPS_SCRIPT_EXEC_URL || ""); } catch { throw new GatewayFailure("CONFIG_EXEC_URL"); }
+  if (url.protocol !== "https:" || url.hostname !== "script.google.com" || !url.pathname.endsWith("/exec"))
+    throw new GatewayFailure("CONFIG_EXEC_URL");
+  const auth = jsonObject(env.APPS_SCRIPT_AUTH_BODY_JSON, "CONFIG_AUTH_BODY");
+  if ("action" in auth || "payload" in auth || "environment" in auth) throw new GatewayFailure("CONFIG_AUTH_BODY");
+  const extra = env.APPS_SCRIPT_AUTH_HEADERS_JSON ? jsonObject(env.APPS_SCRIPT_AUTH_HEADERS_JSON, "CONFIG_AUTH_HEADERS") : {};
+  if (Object.keys(extra).some(k => ["content-type", "host", "content-length"].includes(k.toLowerCase())) ||
+      Object.values(extra).some(v => typeof v !== "string")) throw new GatewayFailure("CONFIG_AUTH_HEADERS");
+  const environment = env.AUTOMATION_ENVIRONMENT === "production" ? "production" : "development";
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { ...extra as Record<string, string>, "Content-Type": "application/json" },
+      body: JSON.stringify({ ...auth, action, payload, environment }),
+      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw new GatewayFailure(error instanceof Error && error.name === "TimeoutError" ? "GATEWAY_TIMEOUT" : "GATEWAY_NETWORK");
+  }
+  if (!response.ok) throw new GatewayFailure(`GATEWAY_HTTP_${response.status}`);
+  const type = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() || "";
+  if (type !== "application/json" && !type.endsWith("+json")) throw new GatewayFailure("GATEWAY_NON_JSON");
+  let result: unknown;
+  try { result = await response.json(); } catch { throw new GatewayFailure("GATEWAY_MALFORMED_JSON"); }
+  if (!result || typeof result !== "object" || Array.isArray(result)) throw new GatewayFailure("GATEWAY_INVALID_RESPONSE");
+  const r = result as Record<string, unknown>;
+  // Apps Script reports its own internal failures as SERVICE_UNAVAILABLE plus a fixed diagnostic code.
+  if (r.ok === false && r.code === "SERVICE_UNAVAILABLE" && typeof r.diagnostic_code === "string" &&
+      /^[A-Z][A-Z0-9_]{2,40}$/.test(r.diagnostic_code))
+    throw new GatewayFailure(`SCRIPT_${r.diagnostic_code}`);
+  return r;
+}
+
+function failureCode(error: unknown) {
+  return error instanceof GatewayFailure ? error.code : "UNEXPECTED";
+}
+
+async function runMaintenanceDirect(scheduledTime: number, env: Env) {
+  for (const taskId of maintenanceTasksAt(scheduledTime)) {
+    const action = GATEWAY_ACTIONS[taskId];
+    try {
+      const result = await callAppsScript(action, {}, env);
+      const errors = Number(result.errors || 0);
+      if (result.ok !== true || errors > 0)
+        console.error("Viewing maintenance reported errors", { action, processed: Number(result.processed || 0), errors });
+      else console.log("Viewing maintenance ok", { action, processed: Number(result.processed || 0) });
+    } catch (error) {
+      // The next minute's run repeats the sweep, so a failed run is not retried here.
+      console.error("Viewing maintenance failed", { action, reason: failureCode(error) });
+    }
+  }
+}
+
 export function maintenanceTasksAt(scheduledTime: number): string[] {
   const tasks = ["dwellhunt-viewing-reminders-recovery"];
   if (Math.floor(scheduledTime / 60_000) % 5 === 0)
@@ -162,7 +248,9 @@ export default {
     const validTarget = (env.AUTOMATION_ENVIRONMENT === "development" && env.WEBSITE_ORIGIN === "https://development.dwellhunt-viewing-dev.pages.dev") ||
       (env.AUTOMATION_ENVIRONMENT === "production" && env.WEBSITE_ORIGIN === "https://mfds824.github.io");
     if (env.AUTOMATION_ENABLED !== "true" || !validTarget) return;
-    ctx.waitUntil(enqueueMaintenance(event.scheduledTime, env));
+    ctx.waitUntil(env.VIEWING_BACKEND === "apps-script"
+      ? runMaintenanceDirect(event.scheduledTime, env)
+      : enqueueMaintenance(event.scheduledTime, env));
   },
   async fetch(request: Request, env: Env): Promise<Response> {
     const origin = request.headers.get("Origin");
@@ -246,6 +334,16 @@ export default {
         !(typeof data.email === "string" && data.email.trim()) &&
         !(typeof data.phone === "string" && data.phone.trim()))
       return json({ ok: false, code: "CONTACT_REQUIRED" }, 400, cors);
+
+    if (usesAppsScriptDirect(env, taskId)) {
+      try {
+        const safe = safeResponse(await callAppsScript(GATEWAY_ACTIONS[taskId], data, env));
+        return json(safe, Number(safe.httpStatus), cors);
+      } catch (error) {
+        console.error("Apps Script gateway failed", { action: GATEWAY_ACTIONS[taskId], reason: failureCode(error) });
+        return json({ ok: false, code: "SERVICE_UNAVAILABLE" }, 503, cors);
+      }
+    }
 
     try {
       const output = await triggerAndWait(taskId, data, await idempotencyKey(taskId, data), env.TRIGGER_SECRET_KEY);
