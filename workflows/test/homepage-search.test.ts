@@ -65,7 +65,7 @@ test('homepage preset edits, reset, validation, counts and sorting retain indepe
 });
 
 test('location search accepts Colombo zone spellings, area names and suggestion labels', async () => {
-  const { normalizeLocation, locationQuery, locationSuggestions, matchesLocation, COLOMBO_AREAS } = await import('../website/homepage-search.js');
+  const { normalizeLocation, locationQuery, locationSuggestions, matchesLocation, COLOMBO_AREAS } = await import(new URL('../website/homepage-search.js', import.meta.url).href);
   assert.equal(COLOMBO_AREAS.length, 15);
   for (const text of ['Colombo 7', 'colombo-07', 'Col 7', 'COLOMBO 07 (Cinnamon Gardens)']) assert.equal(normalizeLocation(text), 'colombo 07');
   assert.equal(normalizeLocation('Colombo 15'), 'colombo 15');
@@ -80,7 +80,7 @@ test('location search accepts Colombo zone spellings, area names and suggestion 
     { city: 'Galle', district: 'Galle', address: 'Lighthouse Street', title: 'House' },
   ];
   const cities = homes.map(p => p.city);
-  const find = q => homes.filter(p => matchesLocation(p, q, cities)).map(p => p.city);
+  const find = (q: string) => homes.filter(p => matchesLocation(p, q, cities)).map(p => p.city);
   assert.deepEqual(find('colombo 7'), ['Colombo 07']);
   assert.deepEqual(find('Kollupitiya'), ['Colombo 03']);
   assert.deepEqual(find('Galle'), ['Galle']);

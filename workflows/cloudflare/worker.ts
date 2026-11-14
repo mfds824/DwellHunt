@@ -140,6 +140,7 @@ async function triggerAndWait(taskId: string, payload: Record<string, unknown>, 
 }
 
 const GATEWAY_ACTIONS: Record<string, string> = {
+  "dwellhunt-new-lead": "lead",
   "dwellhunt-viewing-booking": "intake",
   "dwellhunt-viewing-agent-approval": "telegram",
   "dwellhunt-viewing-buyer-actions": "customer_action",

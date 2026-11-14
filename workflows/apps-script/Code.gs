@@ -41,7 +41,7 @@ function dhHandlePost_(e) {
     if (!p || typeof p !== 'object' || Array.isArray(p)) fail('INVALID_JSON', 400);
     if (!equal(p.gatewaySecret, cfg('GATEWAY_SECRET'))) fail('UNAUTHORIZED', 401);
     if(p.environment && !['development','production'].includes(p.environment))fail('INVALID_ENVIRONMENT',400);
-    if(p.environment==='production' && !['intake','telegram','customer_action','reminders','followup','viewing_health'].includes(p.action))fail('INVALID_ACTION',400);
+    if(p.environment==='production' && !['intake','telegram','customer_action','reminders','followup','viewing_health','lead'].includes(p.action))fail('INVALID_ACTION',400);
     DH_VIEWING_CONTEXT_=p.environment==='production'?'production':'';
     lock = LockService.getScriptLock();
     if (!lock.tryLock(1500)) fail('BUSY_RETRY', 503);
@@ -52,6 +52,7 @@ function dhHandlePost_(e) {
     else if (p.action === 'reminders') r = tick(false);
     else if (p.action === 'followup') r = tick(true);
     else if (p.action === 'viewing_health') r = viewingHealth();
+    else if (p.action === 'lead') r = dhLead_(p.payload || {});
     else if (p.action === 'listing_tracking_health') r = dhListingHealth_();
     else if (p.action === 'listing_sheet_sync') r = dhListingUpsert_(p.payload || {});
     else if (p.action === 'listing_reminder') r = dhListingReminder_(p.payload || {}, false);

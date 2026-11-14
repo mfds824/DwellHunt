@@ -434,3 +434,33 @@ test("direct mode timer runs reminders every minute and follow-up every fifth mi
     assert.equal(calls.length, 0);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test("direct mode verifies the lead's Turnstile token, then saves the lead through Apps Script", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: { url: string; body: any }[] = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url.includes("siteverify")) { calls.push({ url, body: String(init?.body) }); return Response.json({ success: true, hostname: "development.dwellhunt-viewing-dev.pages.dev", action: "lead" }); }
+    calls.push({ url, body: JSON.parse(String(init?.body)) });
+    return Response.json({ ok: true, httpStatus: 200, status: "received", duplicate: false });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://api.example.test/api/dwellhunt/leads", {
+      method: "POST", headers: { Origin: directEnv.WEBSITE_ORIGIN, "Content-Type": "text/plain" },
+      body: JSON.stringify({ turnstile_token: "lead-token", customer_name: "Buyer", email: "buyer@example.test", consent: true, website: "" }) }), directEnv);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, httpStatus: 200, status: "received", duplicate: false });
+    assert.equal(calls.length, 2);
+    assert.match(calls[0].url, /siteverify/);
+    assert.equal(calls[1].url, directEnv.APPS_SCRIPT_EXEC_URL);
+    assert.equal(calls[1].body.action, "lead");
+    assert.equal("turnstile_token" in calls[1].body.payload, false);
+    assert.equal("website" in calls[1].body.payload, false);
+    assert.ok(!calls.some(c => c.url.includes("trigger.dev")));
+    globalThis.fetch = async () => Response.json({ success: false, "error-codes": ["invalid-input-response"] });
+    const rejected = await worker.fetch(new Request("https://api.example.test/api/dwellhunt/leads", {
+      method: "POST", headers: { Origin: directEnv.WEBSITE_ORIGIN, "Content-Type": "text/plain" },
+      body: JSON.stringify({ turnstile_token: "bad", customer_name: "Buyer", email: "buyer@example.test", consent: true }) }), directEnv);
+    assert.equal(rejected.status, 403);
+  } finally { globalThis.fetch = originalFetch; }
+});

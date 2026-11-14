@@ -203,3 +203,83 @@ test('Gateway validates authentication before accepting Production context and r
   const good=c.dhHandlePost_({postData:{contents:JSON.stringify({gatewaySecret:'mock-key',environment:'production',action:'intake',payload:{environment:'development'}})}});
   assert.equal(good.mode,'production');assert.equal(c.DH_VIEWING_CONTEXT_,'');
 });
+
+const leadsSource = readFileSync(new URL('../apps-script/Leads.gs', import.meta.url), 'utf8');
+function leadHarness(settings: Record<string,string|undefined> = {}) {
+  const c = developmentHarness({ ...developmentSettings, DEV_DISABLE_TELEGRAM: 'false', DEV_TEST_TELEGRAM_ID: 'dev-chat',
+    LIVE_TELEGRAM_ID: 'live-chat', LIVE_SPREADSHEET_ID: 'live-sheet', SPREADSHEET_ID: 'test-sheet', ...settings });
+  runInNewContext(leadsSource, c);
+  const rows: unknown[][] = [];
+  const sent: { telegram: any[]; email: any[]; logs: string[]; sheets: string[] } = { telegram: [], email: [], logs: [], sheets: [] };
+  let n = 0;
+  c.Utilities = { getUuid: () => `0000-0000-0000-${String(++n).padStart(4, '0')}` };
+  c.sheet = (name: string, cols: string[]) => { sent.sheets.push(name + '@' + c.cfg('SPREADSHEET_ID')); return {
+    getLastRow: () => rows.length + 1,
+    getRange: (row: number, col: number, numRows?: number, numCols?: number) => ({
+      getDisplayValues: () => rows.slice(row - 2, row - 2 + (numRows || 1)).map(r => r.slice(col - 1, col - 1 + (numCols || cols.length)).map(String)),
+      setValue: (v: unknown) => { rows[row - 2][col - 1] = v; },
+    }),
+    appendRow: (r: unknown[]) => { rows.push([...r]); },
+  }; };
+  c.tg = (_m: string, data: any) => { sent.telegram.push(data); return {}; };
+  c.MailApp = { sendEmail: (m: any) => { sent.email.push(m); } };
+  c.log = (_id: string, code: string) => sent.logs.push(code);
+  return { c, rows, sent, cols: c.DH_LEAD_COLUMNS as string[] };
+}
+const goodLead = { customer_name: 'Test Buyer', email: 'Buyer@Example.test', phone: '+94770000000', enquiry_type: 'schedule_tour',
+  property: 'Demo Villa', property_id: 'prop-demo', location: 'Colombo 07', budget: '425000000',
+  message: 'Please arrange a viewing this week', preferred_date: '2026-11-20', consent: true };
+
+test('Production lead is stored in the live sheet, scored and announced once to the live chat and buyer', () => {
+  const { c, rows, sent, cols } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  const r = c.dhLead_({ ...goodLead });
+  assert.equal(r.status, 'received'); assert.equal(r.duplicate, false);
+  assert.deepEqual(sent.sheets, ['DwellHunt_Leads@live-sheet']);
+  assert.equal(rows.length, 1);
+  const row = Object.fromEntries(cols.map((k, i) => [k, rows[0][i]]));
+  assert.equal(row['Email'], 'buyer@example.test'); assert.equal(row['Ai lead priority'], 'HOT'); assert.equal(row['Lead Status'], 'new');
+  assert.equal(sent.telegram.length, 1); assert.equal(sent.telegram[0].chat_id, 'live-chat'); assert.match(sent.telegram[0].text, /HOT LEAD/);
+  assert.equal(sent.email.length, 1); assert.equal(sent.email[0].to, 'buyer@example.test'); assert.match(sent.email[0].subject, /received your DwellHunt enquiry/);
+  assert.notEqual(row['Telegram Sent'], 'failed'); assert.notEqual(row['Confirmation Email Sent'], '');
+  const again = c.dhLead_({ ...goodLead });
+  assert.equal(again.duplicate, true); assert.equal(rows.length, 1); assert.equal(sent.telegram.length, 1); assert.equal(sent.email.length, 1);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Lead requires consent and a valid contact, neutralises spreadsheet formulas and survives alert failures', () => {
+  const { c, rows, sent, cols } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  assert.throws(() => c.dhLead_({ ...goodLead, consent: false }), /INVALID_REQUEST/);
+  assert.throws(() => c.dhLead_({ ...goodLead, email: '', phone: '' }), /INVALID_REQUEST/);
+  assert.throws(() => c.dhLead_({ ...goodLead, email: 'not-an-email' }), /INVALID_REQUEST/);
+  assert.equal(rows.length, 0);
+  c.tg = () => { throw new Error('telegram down'); };
+  c.MailApp = { sendEmail: () => { throw new Error('quota'); } };
+  const r = c.dhLead_({ ...goodLead, customer_name: '=HYPERLINK("x")', message: 'hello' });
+  assert.equal(r.status, 'received');
+  const row = Object.fromEntries(cols.map((k, i) => [k, rows[0][i]]));
+  assert.equal(String(row['Customer Name']).startsWith("'="), true);
+  assert.equal(row['Telegram Sent'], 'failed'); assert.equal(row['Confirmation Email Sent'], 'failed');
+  assert.ok(sent.logs.includes('LEAD_TELEGRAM_FAILED') && sent.logs.includes('LEAD_EMAIL_FAILED'));
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Development lead uses the test sheet and chat and never emails an unrelated address', () => {
+  const { c, sent } = leadHarness();
+  const r = c.dhLead_({ ...goodLead, email: 'stranger@example.test' });
+  assert.equal(r.status, 'received');
+  assert.deepEqual(sent.sheets, ['DwellHunt_Leads@test-sheet']);
+  assert.equal(sent.telegram[0].chat_id, 'dev-chat');
+  assert.equal(sent.email.length, 0); assert.ok(sent.logs.includes('DEV_LEAD_EMAIL_SKIPPED'));
+  c.dhLead_({ ...goodLead, email: 'test@example.test', property_id: 'other' });
+  assert.equal(sent.email.length, 1);
+});
+
+test('Gateway accepts the lead action in Production context', () => {
+  const c = developmentHarness({ ...developmentSettings, GATEWAY_SECRET: 'mock-key' });
+  runInNewContext(leadsSource, c);
+  c.dhLead_ = () => ({ httpStatus: 200, status: 'received', context: c.DH_VIEWING_CONTEXT_ });
+  const r = c.dhHandlePost_({ postData: { contents: JSON.stringify({ gatewaySecret: 'mock-key', environment: 'production', action: 'lead', payload: {} }) } });
+  assert.equal(r.ok, true); assert.equal(r.context, 'production'); assert.equal(c.DH_VIEWING_CONTEXT_, '');
+});
