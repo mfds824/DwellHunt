@@ -164,6 +164,7 @@ function dhLead_(p) {
   if (record['Phone']) record['Phone'] = "'" + record['Phone'];
   s.appendRow(DH_LEAD_COLUMNS.map(k => safeCell(record[k])));
   if (spam) return { httpStatus: 200, status: 'received', duplicate: false };
+  if (typeof dhAgentForwardLead_ === 'function') dhAgentForwardLead_(lead, scored, id); // Agents.gs: email agent-listing leads to the agent
   const row = s.getLastRow();
   const mark = (column, value) => { try { s.getRange(row, col(column) + 1).setValue(value); } catch (e) { log(id, 'LEAD_MARK_FAILED'); } };
 

@@ -7,11 +7,22 @@
 var DH_OWNER_SHEET = 'DwellHunt_Owner_Listings';
 var DH_OWNER_COLUMNS = ['Date', 'Reference', 'Status', 'Owner Name', 'Email', 'Phone', 'Preferred Contact', 'Purpose', 'Category',
   'Title', 'Price', 'Currency', 'Price Period', 'District', 'City', 'Street', 'Building', 'Unit', 'Photo Count', 'Public Listing',
-  'Draft ID', 'Review Key', 'Telegram Sent', 'Owner Email Sent', 'Decided At', 'Published At', 'Expires At', 'Reminders Sent', 'Notes'];
+  'Draft ID', 'Review Key', 'Telegram Sent', 'Owner Email Sent', 'Decided At', 'Published At', 'Expires At', 'Reminders Sent', 'Notes',
+  'Listed By', 'Agent ID'];
 var DH_OWNER_CATEGORIES = ['house', 'annex', 'room', 'apartment', 'villa', 'commercial', 'land'];
 var DH_OWNER_CATEGORY_LABELS = { house: 'House', annex: 'Annex', room: 'Room / boarding', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
 
-function dhOwnerSheet_() { return sheet(DH_OWNER_SHEET, DH_OWNER_COLUMNS); }
+/** Opens DwellHunt_Owner_Listings, adding the agent columns to a sheet created before agents existed. */
+function dhOwnerSheet_() {
+  const older = DH_OWNER_COLUMNS.slice(0, -2);
+  try {
+    const existing = SpreadsheetApp.openById(cfg('SPREADSHEET_ID')).getSheetByName(DH_OWNER_SHEET);
+    if (existing && existing.getLastColumn() === older.length &&
+        JSON.stringify(existing.getRange(1, 1, 1, older.length).getDisplayValues()[0]) === JSON.stringify(older))
+      existing.getRange(1, older.length + 1, 1, 2).setValues([DH_OWNER_COLUMNS.slice(-2)]);
+  } catch (e) { /* the header check in sheet() below still reports a real mismatch */ }
+  return sheet(DH_OWNER_SHEET, DH_OWNER_COLUMNS);
+}
 function dhOwnerCol_(name) { return DH_OWNER_COLUMNS.indexOf(name); }
 function dhOwnerRows_(s) {
   return s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, DH_OWNER_COLUMNS.length).getDisplayValues().map(r => r.map(v => String(v).replace(/^'/, ''))) : [];
@@ -63,7 +74,8 @@ function dhOwnerPublicListing_(input, owner, privateLocation) {
   return out;
 }
 
-function dhOwnerListing_(p) {
+/** agent (optional) is a verified, signed-in agent from Agents.gs; their listings join the same review queue. */
+function dhOwnerListing_(p, agent) {
   const owner = p.owner || {}, sel = p.selection || {}, conf = p.confirmations || {}, loc = p.privateLocation || {};
   const o = { name: clean(owner.name, 120), email: clean(owner.email, 254).toLowerCase(), phone: clean(owner.phone, 20).replace(/[\s()-]/g, ''),
     preferredContact: ['whatsapp', 'phone', 'email'].indexOf(owner.preferredContact) >= 0 ? owner.preferredContact : 'whatsapp' };
@@ -72,11 +84,12 @@ function dhOwnerListing_(p) {
   if (!o.name) invalid.push('owner.name');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(o.email)) invalid.push('owner.email');
   if (!/^\+[1-9]\d{6,14}$/.test(o.phone)) invalid.push('owner.phone');
-  if (sel.listingRole !== 'owner' || ['buy', 'rent'].indexOf(sel.listingPurpose) < 0 || DH_OWNER_CATEGORIES.indexOf(sel.propertyCategory) < 0) invalid.push('selection');
+  if (['owner', 'agent'].indexOf(sel.listingRole) < 0 || (sel.listingRole === 'agent' && !agent) || ['buy', 'rent'].indexOf(sel.listingPurpose) < 0 || DH_OWNER_CATEGORIES.indexOf(sel.propertyCategory) < 0) invalid.push('selection');
   if (sel.propertyCategory === 'room' && sel.listingPurpose === 'buy') invalid.push('selection');
   if (conf.authorized !== true || conf.accurate !== true || conf.photoPermission !== true || p.consent !== true) invalid.push('confirmations');
   if (!priv.district || !priv.city) invalid.push('privateLocation');
   const pub = dhOwnerPublicListing_(p.publicListing, o, priv);
+  if (agent) { pub.listedBy = 'agent'; pub.contact = { via: 'DwellHunt', displayName: clean(agent.agency, 80) || 'DwellHunt agent' }; }
   if (!pub.title) invalid.push('publicListing.title');
   if (!(pub.price > 0)) invalid.push('publicListing.price');
   if (!pub.photos.length) invalid.push('publicListing.photos');
@@ -89,7 +102,7 @@ function dhOwnerListing_(p) {
   // A retried send of the same draft returns the existing reference instead of creating a second listing.
   const same = draftId && mine.find(r => r[col('Draft ID')] === draftId);
   if (same) return { httpStatus: 200, status: 'received', duplicate: true, reference: same[col('Reference')] };
-  if (mine.filter(r => Date.parse(r[col('Date')]) > Date.now() - 86400000).length >= 3) fail('RATE_LIMITED', 429);
+  if (mine.filter(r => Date.parse(r[col('Date')]) > Date.now() - 86400000).length >= (agent ? 20 : 3)) fail('RATE_LIMITED', 429);
 
   const at = now(), month = Utilities.formatDate(new Date(), 'Asia/Colombo', 'yyMM');
   const sequence = rows.filter(r => r[col('Reference')].indexOf('OL-' + month + '-') === 0).length + 1;
@@ -101,13 +114,13 @@ function dhOwnerListing_(p) {
     'Currency': pub.currency, 'Price Period': dhOwnerPricePeriod_(pub), 'District': priv.district, 'City': priv.city, 'Street': priv.street,
     'Building': priv.building, 'Unit': priv.unit ? "'" + priv.unit : '', 'Photo Count': pub.photos.length, 'Public Listing': JSON.stringify(pub),
     'Draft ID': draftId, 'Review Key': key, 'Telegram Sent': '', 'Owner Email Sent': '', 'Decided At': '', 'Published At': '',
-    'Expires At': '', 'Reminders Sent': '', 'Notes': '',
+    'Expires At': '', 'Reminders Sent': '', 'Notes': '', 'Listed By': agent ? 'agent' : 'owner', 'Agent ID': agent ? agent.id : '',
   };
   s.appendRow(DH_OWNER_COLUMNS.map(k => safeCell(record[k])));
   const row = s.getLastRow();
   const mark = (column, value) => { try { s.getRange(row, col(column) + 1).setValue(value); } catch (e) { log(reference, 'OWNER_MARK_FAILED'); } };
-  mark('Telegram Sent', dhOwnerReviewAlert_(reference, key, o, priv, pub));
-  mark('Owner Email Sent', dhOwnerEmail_(o, reference, 'received', pub));
+  mark('Telegram Sent', dhOwnerReviewAlert_(reference, key, o, priv, pub, agent));
+  mark('Owner Email Sent', dhOwnerEmail_(o, reference, agent ? 'agent_received' : 'received', pub));
   return { httpStatus: 200, status: 'received', duplicate: false, reference };
 }
 
@@ -122,21 +135,22 @@ function dhOwnerButtons_(reference, key, status) {
   return { inline_keyboard: rows };
 }
 
-function dhOwnerReviewAlert_(reference, key, o, priv, pub) {
+function dhOwnerReviewAlert_(reference, key, o, priv, pub, agent) {
   if (dhTelegramDisabled_()) { log(reference, 'DEV_OWNER_TELEGRAM_SKIPPED'); return 'skipped'; }
   try {
     const h = dhLeadHtml_;
     const where = [pub.location.city, pub.location.district].filter(Boolean).join(', ');
     const privateWhere = [priv.street, priv.building, priv.unit].filter(Boolean).join(', ');
     const lines = [
-      '🏠 <b>NEW OWNER LISTING</b> · ' + h(reference), '',
+      (agent ? '🧑‍💼 <b>NEW AGENT LISTING</b> · ' + h(reference) + '\n' + h(agent.agency) + ' · agent ' + h(agent.id) : '🏠 <b>NEW OWNER LISTING</b> · ' + h(reference)), '',
       (pub.purpose === 'buy' ? 'Sale' : pub.rentalType === 'short-stay' ? 'Short stay' : 'Rent') + ' · ' + h(DH_OWNER_CATEGORY_LABELS[pub.category]) + ' · <b>' + h(dhOwnerPriceText_(pub)) + '</b>',
       '<b>' + h(pub.title) + '</b>',
       '📍 ' + h(where) + (privateWhere ? '\n🔒 Private address: ' + h(privateWhere) : ''), '',
       '👤 ' + h(o.name), '📱 ' + h(o.phone) + dhLeadWhatsApp_(o.phone), '✉️ ' + h(o.email),
       'Prefers: ' + ({ whatsapp: 'WhatsApp', phone: 'Phone call', email: 'Email' })[o.preferredContact], '',
       '📷 ' + pub.photos.length + ' photo' + (pub.photos.length === 1 ? '' : 's') + ' · <a href="' + h(pub.photos[0].url) + '">cover photo</a>', '',
-      '👉 Verify before publishing: call or WhatsApp the owner, and ask for one proof of ownership (utility bill, deed page or rates notice) by WhatsApp.',
+      agent ? '👉 Verified agent. Before publishing, confirm they are authorised to advertise this property (owner’s consent or listing agreement).'
+        : '👉 Verify before publishing: call or WhatsApp the owner, and ask for one proof of ownership (utility bill, deed page or rates notice) by WhatsApp.',
     ];
     tg('sendMessage', { chat_id: dhLeadChat_(), text: lines.join('\n').slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: true,
       reply_markup: dhOwnerButtons_(reference, key, 'pending review') });
@@ -149,6 +163,7 @@ function dhOwnerEmail_(o, reference, kind, pub, extra, link) {
   const site = cfg('WEBSITE_URL').replace(/\/$/, '');
   const copy = {
     received: ['We received your listing ' + reference, 'Thank you for listing “' + pub.title + '” with DwellHunt. Your reference number is ' + reference + '.\n\nWhat happens next:\n1. Within 1 working day our team will call or WhatsApp you to verify the listing.\n2. We will ask you to share one proof of ownership, such as a utility bill, a deed page or a rates notice, by WhatsApp.\n3. Once verified, your listing goes live for 1 month. We will remind you before it ends.\n\nYour phone number and email are never shown on the website. Enquiries come to DwellHunt first, and we pass genuine ones to you.'],
+    agent_received: ['We received your listing ' + reference, 'Thank you for sending “' + pub.title + '” to DwellHunt. Your reference number is ' + reference + '.\n\nOur team will review it, usually within 1 working day, and may contact you to confirm you are authorised to advertise it. You can follow its status on your agent dashboard: ' + site + '/#agents\n\nOnce approved, it goes live for 1 month. Buyer enquiries are emailed to you.'],
     published: ['Your listing ' + reference + ' is now live', 'Good news: “' + pub.title + '” is verified and now live on DwellHunt until ' + (extra || '') + '.\n\nView it here: ' + site + '/#owner-listing=' + encodeURIComponent(reference) + '\n\nEnquiries and viewing requests come to DwellHunt first. We check them and pass genuine ones to you.' + (link ? '\n\nGet them straight to your phone on Telegram: open this link and press Start.\n' + link + '\nThe link works once and expires in 7 days. Please do not share it.' : '')],
     changes: ['Your listing ' + reference + ' needs a few changes', 'Thank you for listing “' + pub.title + '”. Before it can go live, a few details need updating. Our team will contact you shortly to explain what is needed.'],
     rejected: ['About your listing ' + reference, 'Thank you for listing “' + pub.title + '” with DwellHunt. Unfortunately we are unable to publish this listing. If you think this is a mistake, please reply to this email or message us on WhatsApp.'],
