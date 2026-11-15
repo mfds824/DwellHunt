@@ -1000,3 +1000,10 @@
 @media (max-width: 479px) {
   .dh-zx-prefix { display: none; }
 }
+
+/* Footer link to the privacy policy. */
+.dh-home-footer .dh-footer-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

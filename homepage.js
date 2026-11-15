@@ -687,6 +687,7 @@ export function createHomepage(
       h("strong", null, "DwellHunt"),
       h("span", null, "A Higher Way Home."),
       h("span", null, "Thoughtful property search for Sri Lanka"),
+      h("a", { href: "./privacy.html", className: "dh-footer-link" }, "Privacy Policy"),
     );
   }
   return { Header, Home, Footer };
