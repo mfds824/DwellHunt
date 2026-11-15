@@ -144,12 +144,12 @@ function dhOwnerReviewAlert_(reference, key, o, priv, pub) {
   } catch (e) { log(reference, 'OWNER_TELEGRAM_FAILED'); return 'failed'; }
 }
 
-function dhOwnerEmail_(o, reference, kind, pub, extra) {
+function dhOwnerEmail_(o, reference, kind, pub, extra, link) {
   if (DH_VIEWING_CONTEXT_ !== 'production' && dhIsDevelopment_() && o.email !== cfg('DEV_TEST_EMAIL', '').toLowerCase()) { log(reference, 'DEV_OWNER_EMAIL_SKIPPED'); return 'skipped'; }
   const site = cfg('WEBSITE_URL').replace(/\/$/, '');
   const copy = {
     received: ['We received your listing ' + reference, 'Thank you for listing “' + pub.title + '” with DwellHunt. Your reference number is ' + reference + '.\n\nWhat happens next:\n1. Within 1 working day our team will call or WhatsApp you to verify the listing.\n2. We will ask you to share one proof of ownership, such as a utility bill, a deed page or a rates notice, by WhatsApp.\n3. Once verified, your listing goes live for 1 month. We will remind you before it ends.\n\nYour phone number and email are never shown on the website. Enquiries come to DwellHunt first, and we pass genuine ones to you.'],
-    published: ['Your listing ' + reference + ' is now live', 'Good news: “' + pub.title + '” is verified and now live on DwellHunt until ' + (extra || '') + '.\n\nView it here: ' + site + '/#owner-listing=' + encodeURIComponent(reference) + '\n\nEnquiries and viewing requests come to DwellHunt first. We check them and pass genuine ones to you.'],
+    published: ['Your listing ' + reference + ' is now live', 'Good news: “' + pub.title + '” is verified and now live on DwellHunt until ' + (extra || '') + '.\n\nView it here: ' + site + '/#owner-listing=' + encodeURIComponent(reference) + '\n\nEnquiries and viewing requests come to DwellHunt first. We check them and pass genuine ones to you.' + (link ? '\n\nGet them straight to your phone on Telegram: open this link and press Start.\n' + link + '\nThe link works once and expires in 7 days. Please do not share it.' : '')],
     changes: ['Your listing ' + reference + ' needs a few changes', 'Thank you for listing “' + pub.title + '”. Before it can go live, a few details need updating. Our team will contact you shortly to explain what is needed.'],
     rejected: ['About your listing ' + reference, 'Thank you for listing “' + pub.title + '” with DwellHunt. Unfortunately we are unable to publish this listing. If you think this is a mistake, please reply to this email or message us on WhatsApp.'],
     reminder: ['Your listing ' + reference + ' ends on ' + (extra || ''), 'Your DwellHunt listing “' + pub.title + '” ends on ' + (extra || '') + '. To keep it live for another month, simply reply to this email or message us on WhatsApp. If it is already rented or sold, let us know and we will close it.'],
@@ -179,32 +179,49 @@ function dhOwnerAction_(q) {
   const s = dhOwnerSheet_(), col = dhOwnerCol_, rows = dhOwnerRows_(s);
   const index = rows.findIndex(r => r[col('Reference')] === reference);
   if (index < 0 || !rows[index][col('Review Key')] || !equal(key, rows[index][col('Review Key')])) fail('UNAUTHORIZED_AGENT', 403);
+  const current = rows[index][col('Status')];
+  if (op === 's') { ack(q, 'Status: ' + current); return { ignored: true }; }
+  const result = dhOwnerApply_(reference, op, 'admin');
+  if (result.ignored) { ack(q, 'Already ' + result.status + '.'); return { ignored: true }; }
+  try { tg('editMessageReplyMarkup', { chat_id: fromChat, message_id: q.message.message_id, reply_markup: dhOwnerButtons_(reference, key, result.status) }); }
+  catch (e) { log(reference, 'OWNER_BUTTON_UPDATE_FAILED'); }
+  ack(q, 'Saved: ' + result.status);
+  return { status: 'owner_' + result.status.replace(/ /g, '_') };
+}
+
+/** Applies one status change. by = 'admin' (review buttons) or 'owner' (the owner's own Telegram buttons: renew, close). */
+function dhOwnerApply_(reference, op, by) {
+  const s = dhOwnerSheet_(), col = dhOwnerCol_, rows = dhOwnerRows_(s);
+  const index = rows.findIndex(r => r[col('Reference')] === reference);
+  if (index < 0) fail('NOT_FOUND', 404);
   const r = rows[index], row = index + 2, current = r[col('Status')];
   const o = { name: r[col('Owner Name')], email: r[col('Email')] };
   let pub = {};
   try { pub = JSON.parse(r[col('Public Listing')]); } catch (e) { pub = { title: r[col('Title')] }; }
-  if (op === 's') { ack(q, 'Status: ' + current); return { ignored: true }; }
-  const allowed = { p: ['pending review', 'changes requested'], c: ['pending review'], r: ['pending review', 'changes requested'],
-    n: ['published', 'expired'], x: ['published'] }[op];
+  const allowed = (by === 'owner' ? { n: ['published', 'expired'], x: ['published', 'expired'] }
+    : { p: ['pending review', 'changes requested'], c: ['pending review'], r: ['pending review', 'changes requested'], n: ['published', 'expired'], x: ['published'] })[op];
   if (!allowed) fail('INVALID_AGENT_ACTION', 400);
-  if (allowed.indexOf(current) < 0) { ack(q, 'Already ' + current + '.'); return { ignored: true }; }
+  if (allowed.indexOf(current) < 0) return { ignored: true, status: current, pub };
   const set = (column, value) => s.getRange(row, col(column) + 1).setValue(value);
   const at = now();
-  let status = current, email = '';
+  let status = current, email = '', expires = '', link = '';
   if (op === 'p' || op === 'n') {
     const base = op === 'n' && current === 'published' && Date.parse(r[col('Expires At')]) > Date.now() ? Date.parse(r[col('Expires At')]) : Date.now();
-    const expires = dhOwnerAddMonth_(base).toISOString();
+    expires = dhOwnerAddMonth_(base).toISOString();
     status = 'published'; set('Status', status); set('Expires At', expires); set('Reminders Sent', '');
-    if (op === 'p') { set('Published At', at); set('Decided At', at); }
-    email = dhOwnerEmail_(o, reference, 'published', pub, dhOwnerDateText_(expires));
+    if (op === 'p') { set('Published At', at); set('Decided At', at); try { link = dhOwnerConnectLink_(reference); } catch (e) { log(reference, 'OWNER_LINK_FAILED'); } }
+    if (by === 'admin') email = dhOwnerEmail_(o, reference, 'published', pub, dhOwnerDateText_(expires), link);
   } else if (op === 'c') { status = 'changes requested'; set('Status', status); set('Decided At', at); email = dhOwnerEmail_(o, reference, 'changes', pub); }
   else if (op === 'r') { status = 'rejected'; set('Status', status); set('Decided At', at); email = dhOwnerEmail_(o, reference, 'rejected', pub); }
   else if (op === 'x') { status = 'withdrawn'; set('Status', status); set('Decided At', at); }
-  set('Notes', (r[col('Notes')] ? r[col('Notes')] + '\n' : '') + at + ' ' + status + (email && email !== 'skipped' && email !== 'failed' ? ' (owner emailed)' : email === 'failed' ? ' (owner email FAILED)' : ''));
-  try { tg('editMessageReplyMarkup', { chat_id: fromChat, message_id: q.message.message_id, reply_markup: dhOwnerButtons_(reference, key, status) }); }
-  catch (e) { log(reference, 'OWNER_BUTTON_UPDATE_FAILED'); }
-  ack(q, 'Saved: ' + status);
-  return { status: 'owner_' + status.replace(/ /g, '_') };
+  set('Notes', (r[col('Notes')] ? r[col('Notes')] + '\n' : '') + at + ' ' + status + (by === 'owner' ? ' (by owner on Telegram)' : '') +
+    (email && email !== 'skipped' && email !== 'failed' ? ' (owner emailed)' : email === 'failed' ? ' (owner email FAILED)' : ''));
+  // Keep a connected owner informed of the team's decisions; owner-initiated changes are confirmed by the caller.
+  if (by === 'admin' && op === 'n') dhOwnerNotify_(reference, '🔁 Your listing <b>' + dhLeadHtml_(pub.title || reference) + '</b> was renewed. It stays live until ' + dhLeadHtml_(dhOwnerDateText_(expires)) + '.');
+  if (by === 'admin' && op === 'x') dhOwnerNotify_(reference, '🏁 Your listing <b>' + dhLeadHtml_(pub.title || reference) + '</b> is now closed and no longer shown. Thank you for using DwellHunt.');
+  if (link) dhOwnerAdminNote_(reference, r[col('Review Key')], '🔗 <b>Owner Telegram link</b> · ' + dhLeadHtml_(reference) +
+    '\nEmailed to the owner. You can also send it by WhatsApp:\n' + dhLeadHtml_(link) + '\nIt works once and expires in 7 days. /link ' + dhLeadHtml_(reference) + ' makes a new one.', status);
+  return { status, pub, expires };
 }
 
 /** Published, unexpired listings for the website. Only the sanitised public JSON leaves this function. */
@@ -232,6 +249,7 @@ function dhOwnerMaintenance_() {
     if (expires <= nowMs) {
       s.getRange(row, col('Status') + 1).setValue('expired');
       dhOwnerEmail_(o, reference, 'expired', pub);
+      dhOwnerNotify_(reference, '⌛ Your listing <b>' + dhLeadHtml_(pub.title || reference) + '</b> has ended and is no longer shown. Tap Renew to put it back for another month.', dhOwnerOwnerButtons_(reference, 'expired'));
       dhOwnerAdminNote_(reference, r[col('Review Key')], '⌛ <b>Listing ended</b> · ' + dhLeadHtml_(reference) + '\n' + dhLeadHtml_(pub.title || ''), 'expired');
       processed++; return;
     }
@@ -239,6 +257,7 @@ function dhOwnerMaintenance_() {
     const due = days <= 2 ? '2d' : days <= 7 ? '7d' : '';
     if (due && sent.indexOf(due) < 0) {
       dhOwnerEmail_(o, reference, 'reminder', pub, dhOwnerDateText_(r[col('Expires At')]));
+      dhOwnerNotify_(reference, '⏰ Your listing <b>' + dhLeadHtml_(pub.title || reference) + '</b> ends on ' + dhLeadHtml_(dhOwnerDateText_(r[col('Expires At')])) + '. Still available? Tap Renew to keep it live for another month.', dhOwnerOwnerButtons_(reference, 'published'));
       dhOwnerAdminNote_(reference, r[col('Review Key')], '⏰ <b>Listing ends ' + dhLeadHtml_(dhOwnerDateText_(r[col('Expires At')])) + '</b> · ' + dhLeadHtml_(reference) + '\n' + dhLeadHtml_(pub.title || '') + '\nThe owner has been emailed. Renew if they want another month.', 'published');
       s.getRange(row, col('Reminders Sent') + 1).setValue(sent ? sent + ',' + due : due);
       processed++;

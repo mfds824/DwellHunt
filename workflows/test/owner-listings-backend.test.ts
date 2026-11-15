@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
 const read = (f: string) => readFileSync(new URL('../apps-script/' + f, import.meta.url), 'utf8');
-const source = read('Code.gs') + '\n' + read('Leads.gs') + '\n' + read('OwnerListings.gs');
+const source = ['Code.gs', 'Leads.gs', 'OwnerListings.gs', 'OwnerTelegram.gs'].map(read).join('\n');
 
 function fakeSheet() {
   const rows: any[][] = [];
@@ -36,7 +36,7 @@ function harness(environment: 'production' | 'development' = 'production') {
   runInNewContext(source, context);
   const header = (name: string, cols: string[]) => { const s = sheets[name] ||= fakeSheet(); if (!s.rows.length) s.rows.push(cols); return s; };
   context.sheet = header;
-  context.tg = (method: string, data: any) => { telegram.push({ method, data }); return {}; };
+  context.tg = (method: string, data: any) => { telegram.push({ method, data }); return method === 'getMe' ? { username: 'DwellHuntViewingStagingBot' } : {}; };
   context.log = (_id: string, code: string) => logs.push(code);
   context.DH_VIEWING_CONTEXT_ = environment === 'production' ? 'production' : '';
   return { c: context, telegram, mail, logs, sheets, store };
