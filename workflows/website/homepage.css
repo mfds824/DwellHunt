@@ -962,3 +962,10 @@
 @media (max-width: 399px) {
   .dh-price-controls { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 }
+
+/* Footer link to the privacy policy. */
+.dh-home-footer .dh-footer-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
