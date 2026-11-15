@@ -671,3 +671,71 @@ test('A failed delivery names the message type and the reason', () => {
   assert.ok(logs.includes('DELIVERY_FAILED:received:GOOGLE_500'));
   assert.match(alerts[0], /⚠️ Booking dh-alert-1 could not send received \(GOOGLE_500\)\./);
 });
+
+function meetHarness(settings: Record<string, string> = {}, meetResponse: { code: number; body?: unknown } = { code: 200,
+  body: { name: 'spaces/abcSpace', meetingUri: 'https://meet.google.com/abc-defg-hij' } }) {
+  const c = developmentHarness({ ...developmentSettings, ...settings });
+  const calls: { method: string; path: string; body: any }[] = [], meetCalls: any[] = [], logs: string[] = [];
+  const start = new Date(Date.now() + 3 * 86400000).toISOString();
+  c.ScriptApp = { getOAuthToken: () => 'mock-token' };
+  c.UrlFetchApp = { fetch: (url: string, options: any) => { meetCalls.push({ url, body: JSON.parse(options.payload || '{}') });
+    return { getResponseCode: () => meetResponse.code, getContentText: () => JSON.stringify(meetResponse.body ?? {}) }; } };
+  c.save = () => {}; c.available = () => true; c.log = (_id: string, code: string) => logs.push(code);
+  c.getEvent = () => ({ httpCode: 404 });
+  c.google = (method: string, path: string, body: any) => {
+    calls.push({ method, path, body });
+    if (method === 'post') return { id: 'dhmeet1', extendedProperties: { private: { dwellhuntBookingId: 'dhmeet1' } },
+      start: { dateTime: start }, end: { dateTime: new Date(Date.parse(start) + 1800000).toISOString() } };
+    return {};
+  };
+  const booking: any = { booking_id: 'dhmeet1', booking_status: 'approved', property_title: 'Demo Villa', property_url: 'https://example.test/villa',
+    email: 'test@example.test', agent_email: 'test@example.test', _calendar: 'test-calendar', viewing_datetime_utc: start, _sent: {}, _jobs: [] };
+  return { c, calls, meetCalls, logs, booking };
+}
+
+test('With MEET_OPEN_ACCESS on, each viewing gets an Open Google Meet that anyone with the link can join', () => {
+  const { c, calls, meetCalls, booking } = meetHarness({ MEET_OPEN_ACCESS: 'true' });
+  c.reconcileCalendar(booking, [booking]);
+  assert.equal(meetCalls.length, 1);
+  assert.equal(meetCalls[0].url, 'https://meet.googleapis.com/v2/spaces');
+  assert.equal(JSON.stringify(meetCalls[0].body), JSON.stringify({ config: { accessType: 'OPEN', entryPointAccess: 'ALL' } }));
+  const created = calls.find(x => x.method === 'post')!;
+  assert.equal(created.body.location, 'https://meet.google.com/abc-defg-hij');
+  assert.equal('conferenceData' in created.body, false);
+  assert.equal(created.body.attendees.length, 1);
+  assert.equal(booking.google_meet_link, 'https://meet.google.com/abc-defg-hij');
+  assert.equal(booking.booking_status, 'confirmed');
+  assert.ok(booking._jobs.includes('confirmed') && booking._jobs.includes('agent_confirmed'));
+  const invite = calls.find(x => x.method === 'patch' && /sendUpdates=all/.test(x.path))!;
+  assert.match(invite.body.description, /Google Meet: https:\/\/meet\.google\.com\/abc-defg-hij/);
+  c.reconcileCalendar(booking, [booking]);
+  assert.equal(meetCalls.length, 1);
+});
+
+test('With the switch off, bookings keep using the calendar-created Meet and never call the Meet API', () => {
+  const { c, calls, meetCalls, booking } = meetHarness();
+  c.reconcileCalendar(booking, [booking]);
+  assert.equal(meetCalls.length, 0);
+  const created = calls.find(x => x.method === 'post')!;
+  assert.equal(created.body.conferenceData.createRequest.conferenceSolutionKey.type, 'hangoutsMeet');
+  assert.equal(booking.booking_status, 'awaiting_meeting_setup');
+});
+
+test('A Meet API failure falls back to the calendar-created Meet and logs only a code', () => {
+  const { c, calls, logs, booking } = meetHarness({ MEET_OPEN_ACCESS: 'true' }, { code: 403, body: { error: { message: 'private details' } } });
+  c.reconcileCalendar(booking, [booking]);
+  assert.ok(logs.includes('MEET_API_FAILED:GOOGLE_403'));
+  assert.doesNotMatch(JSON.stringify(logs), /private/);
+  const created = calls.find(x => x.method === 'post')!;
+  assert.ok(created.body.conferenceData); assert.equal(booking._meetUri, undefined);
+  const bad = meetHarness({ MEET_OPEN_ACCESS: 'true' }, { code: 200, body: { meetingUri: 'https://evil.example/x' } });
+  bad.c.reconcileCalendar(bad.booking, [bad.booking]);
+  assert.ok(bad.logs.includes('MEET_API_INVALID_RESPONSE'));
+});
+
+test('Meet readiness reports the API status without creating a meeting', () => {
+  const { c, meetCalls } = meetHarness({}, { code: 404 });
+  const r = c.dhMeetReadiness_();
+  assert.equal(r.meet_api_status, 404); assert.equal(r.open_access_enabled, false);
+  assert.equal(meetCalls.length, 1); assert.match(meetCalls[0].url, /spaces\/readiness-check-does-not-exist$/);
+});
