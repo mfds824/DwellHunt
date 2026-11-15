@@ -624,3 +624,50 @@ test('The cancellation message is delivered once to the agent chat, and only for
   c.deliver(stillActive, 'agent_cancelled');
   assert.equal(sent.filter(([m]) => m === 'sendMessage').length, 1);
 });
+
+function tickHarness(bookings: any[]) {
+  const store: Record<string, string | undefined> = { ...developmentSettings, DEV_DISABLE_TELEGRAM: 'false', OPS_CHAT_ID: '333' };
+  const c = developmentHarness(store);
+  c.PropertiesService = { getScriptProperties: () => ({ getProperty: (k: string) => store[k] ?? null, setProperty: (k: string, v: string) => { store[k] = v; } }) };
+  const logs: string[] = [], alerts: string[] = [];
+  c.log = (_id: string, code: string) => logs.push(code);
+  c.tg = (method: string, data: any) => { if (method === 'sendMessage') alerts.push(data.text); return {}; };
+  c.save = () => {}; c.mirror = () => {}; c.pruneLogs = () => {};
+  c.dhWorkflowBookings_ = () => bookings;
+  return { c, logs, alerts };
+}
+const tickBooking = (extra: Record<string, unknown> = {}): any => ({ booking_id: 'dh-alert-1', booking_status: 'approved', created_at: new Date().toISOString(),
+  viewing_datetime_utc: new Date(Date.now() + 3 * 86400000).toISOString(), _approvalExpires: new Date(Date.now() + 86400000).toISOString(),
+  _sent: {}, _jobs: [], ...extra });
+
+test('A failed timer step logs a safe reason code and alerts once without mentioning Trigger.dev', () => {
+  const b = tickBooking();
+  const { c, logs, alerts } = tickHarness([b]);
+  c.reconcileCalendar = () => { throw new Error('GOOGLE_503'); };
+  const r = c.tick(false);
+  assert.equal(r.errors, 1);
+  assert.ok(logs.includes('WORKER_OPERATION_FAILED:GOOGLE_503'));
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0], 'DWELLHUNT SYSTEM ALERT\n⚠️ Booking dh-alert-1 hit a temporary problem (GOOGLE_503).\nIt will retry automatically on the next run. If this repeats, check the DH_Viewing_Log sheet.');
+  assert.doesNotMatch(alerts[0], /Trigger/);
+  c.tick(false);
+  assert.equal(alerts.length, 1);
+  assert.equal(logs.filter(x => x.startsWith('WORKER_OPERATION_FAILED')).length, 2);
+});
+
+test('Business codes and unexpected errors keep their safe codes; raw messages never appear', () => {
+  const { c } = tickHarness([]);
+  assert.equal(c.dhFailureCode_(Object.assign(new Error('x'), { publicCode: 'PRODUCTION_ROUTING_REQUIRED' })), 'PRODUCTION_ROUTING_REQUIRED');
+  assert.equal(c.dhFailureCode_(new Error('CALENDAR_ACCESS_FAILED')), 'CALENDAR_ACCESS_FAILED');
+  assert.equal(c.dhFailureCode_(new Error('buyer@example.test private detail')), 'GATEWAY_UNEXPECTED_ERROR');
+  assert.equal(c.dhFailureCode_(new TypeError('cannot read x of undefined')), 'GATEWAY_TYPEERROR');
+});
+
+test('A failed delivery names the message type and the reason', () => {
+  const b = tickBooking({ booking_status: 'pending_approval', _jobs: ['received'] });
+  const { c, logs, alerts } = tickHarness([b]);
+  c.deliver = () => { throw new Error('GOOGLE_500'); };
+  c.tick(false);
+  assert.ok(logs.includes('DELIVERY_FAILED:received:GOOGLE_500'));
+  assert.match(alerts[0], /⚠️ Booking dh-alert-1 could not send received \(GOOGLE_500\)\./);
+});
