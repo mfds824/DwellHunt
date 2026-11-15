@@ -1,5 +1,5 @@
 import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings, locationSuggestions, locationQuery } from "./homepage-search.js?v=20261115-loc1";
-import { createOwnerFeed } from "./owner-listings-feed.js?v=20261116-ol1";
+import { createOwnerFeed } from "./owner-listings-feed.js?v=20261116-hc1";
 // Homepage presentation only. Marketplace state, routes and integrations remain in app.js.
 export function createHomepage(
   React,
@@ -691,6 +691,7 @@ export function createHomepage(
       h("span", null, "A Higher Way Home."),
       h("span", null, "Thoughtful property search for Sri Lanka"),
       h("a", { href: "./privacy.html", className: "dh-footer-link" }, "Privacy Policy"),
+      h("small", { className: "dh-footer-note" }, "DwellHunt checks who is listing a property but does not guarantee title, boundaries or approvals. Before paying any money, have a lawyer check the deed and do a title search."),
     );
   }
   return { Header, Home, Footer };

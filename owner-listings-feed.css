@@ -17,3 +17,8 @@
 .dh-ol-specs dt { color: #50665a; }
 .dh-ol-specs dd { margin: 0; font-weight: 600; text-transform: none; }
 .dh-ol-description p { white-space: pre-line; font-size: 14px; margin: 0 0 10px; }
+.dh-ol-verified { font-size: 13px; margin: 12px 0 6px; }
+.dh-ol-verified summary { cursor: pointer; font-weight: 700; color: #064e3b; min-height: 32px; }
+.dh-ol-verified p { color: #50665a; margin: 6px 0 0; }
+.dh-ol-diligence { font-size: 12px; color: #50665a; background: #f6f8f6; border-left: 3px solid #d8e1da; padding: 8px 10px; margin: 10px 0 14px; }
+.dh-footer-note { display: block; flex-basis: 100%; max-width: 640px; font-size: 12px; line-height: 1.5; opacity: .8; margin-top: 6px; }
