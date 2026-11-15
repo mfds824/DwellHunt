@@ -69,3 +69,15 @@
 /* Hidden honeypot field (bots fill it, people never see it) and the security check on the review step. */
 .dh-owner .dh-hp{position:absolute!important;left:-10000px!important;width:1px;height:1px;overflow:hidden}
 .dh-owner .dh-captcha{min-height:65px;max-width:100%}
+
+/* Owner Step 1: a chosen option is filled dark green with a tick, so the selection is unmistakable. */
+.dh-listing-choice[data-selected="true"] {
+  background-color: #064e3b;
+  border-color: #064e3b;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(6, 78, 59, 0.18);
+}
+.dh-listing-choice[data-selected="true"] .dh-listing-check {
+  background: #ffffff;
+  color: #064e3b;
+}

@@ -41,7 +41,8 @@ export function createOwnerStart(React) {
   const h = React.createElement;
   const choice = (name, value, current, set, text, disabled = false) => h('label', { key: value, 'data-selected': current === value,
     className: `dh-listing-choice p-3.5 rounded-2xl border text-center transition-all ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${current === value ? 'bg-emerald-50/70 text-emerald-950 border-emerald-700 ring-2 ring-emerald-600/20' : 'bg-stone-50 text-emerald-900 border-emerald-700 hover:bg-emerald-50'}` },
-    h('input', { type: 'radio', name, value, checked: current === value, disabled, onChange: () => set(value), className: 'sr-only' }), h('span', { className: 'font-bold text-sm' }, text));
+    h('input', { type: 'radio', name, value, checked: current === value, disabled, onChange: () => set(value), className: 'sr-only' }), h('span', { className: 'font-bold text-sm' }, text),
+    current === value && h('span', { className: 'dh-listing-check', 'aria-hidden': 'true' }, '✓'));
   return function OwnerStart({ onContinue, onAgencyPortal }) {
     const [purpose, setPurpose] = React.useState('');
     const [category, setCategory] = React.useState('');
@@ -55,9 +56,10 @@ export function createOwnerStart(React) {
         h('fieldset', { className: 'space-y-3' }, h('legend', { className: 'text-xs font-bold text-stone-700 uppercase tracking-wider mb-2' }, 'I want to'),
           h('div', { className: 'grid grid-cols-2 gap-3' }, choice('owner-purpose', 'rent', purpose, setPurpose, 'Rent it out'), choice('owner-purpose', 'buy', purpose, setPurpose, 'Sell it'))),
         h('fieldset', { className: 'space-y-3' }, h('legend', { className: 'text-xs font-bold text-stone-700 uppercase tracking-wider mb-2' }, 'Property type'),
-          h('div', { className: 'grid grid-cols-2 sm:grid-cols-4 gap-3' }, Object.entries(CATEGORY_LABELS).map(([value, text]) =>
-            choice('owner-category', value, category, setCategory, text, value === 'room' && purpose === 'buy'))),
-          purpose === 'buy' && h('p', { className: 'dh-owner-hint' }, 'Rooms can only be listed for rent.')),
+          h('div', { className: 'grid grid-cols-2 sm:grid-cols-4 gap-3' }, Object.entries(CATEGORY_LABELS)
+            // House, Room / boarding and Commercial space are no longer offered to owners; their labels stay for saved drafts.
+            .filter(([value]) => !['house', 'room', 'commercial'].includes(value)).map(([value, text]) =>
+            choice('owner-category', value, category, setCategory, text)))),
         h('div', { className: 'flex flex-wrap items-center justify-between gap-4' },
           h('span', { className: 'dh-owner-hint', role: 'status' }, purpose && category ? `${purpose === 'buy' ? 'Selling' : 'Renting out'} · ${CATEGORY_LABELS[category]}` : 'Choose both options to continue'),
           h('button', { type: 'button', className: primary, disabled: !purpose || !category, onClick: () => onContinue(purpose, category) }, 'Continue')),
