@@ -8,6 +8,8 @@ type Env = Omit<WorkerBindings, OptionalBinding> & Partial<Pick<WorkerBindings, 
 
 const ROUTES: Record<string, string> = {
   "/api/dwellhunt/leads": "dwellhunt-new-lead",
+  "/api/dwellhunt/owner-listings": "dwellhunt-owner-listing",
+  "/api/dwellhunt/owner-listings/public": "dwellhunt-owner-listings-public",
   "/api/dwellhunt/bookings": "dwellhunt-viewing-booking",
   "/api/dwellhunt/agent": "dwellhunt-viewing-agent-approval",
   "/api/dwellhunt/buyer-actions": "dwellhunt-viewing-buyer-actions",
@@ -18,6 +20,9 @@ const ROUTES: Record<string, string> = {
 };
 
 const MAX_BODY_BYTES = 65_536;
+// Owner listings are served only by the Apps Script gateway; there is no Trigger.dev task for them.
+const OWNER_LISTING = "dwellhunt-owner-listing";
+const OWNER_PUBLIC = "dwellhunt-owner-listings-public";
 const TASK_TIMEOUT_MS = 90_000;
 const TERMINAL_FAILURES = new Set(["FAILED", "CRASHED", "CANCELED", "INTERRUPTED", "SYSTEM_FAILURE"]);
 
@@ -36,7 +41,7 @@ function safeResponse(value: unknown) {
       Number(result.httpStatus) < 200 || Number(result.httpStatus) > 599)
     return { ok: false, httpStatus: 503, code: "SERVICE_UNAVAILABLE" };
   const safe: Record<string, unknown> = { ok: result.ok, httpStatus: Number(result.httpStatus) };
-  for (const key of ["code", "fields", "booking_id", "status", "duplicate", "message", "ignored"])
+  for (const key of ["code", "fields", "booking_id", "status", "duplicate", "message", "ignored", "reference"])
     if (result[key] !== undefined) safe[key] = result[key];
   return safe;
 }
@@ -142,6 +147,8 @@ async function triggerAndWait(taskId: string, payload: Record<string, unknown>, 
 const GATEWAY_ACTIONS: Record<string, string> = {
   "dwellhunt-new-lead": "lead",
   "dwellhunt-lead-digest": "lead_digest",
+  [OWNER_LISTING]: "owner_listing",
+  [OWNER_PUBLIC]: "owner_listings_public",
   "dwellhunt-viewing-booking": "intake",
   "dwellhunt-viewing-agent-approval": "telegram",
   "dwellhunt-viewing-buyer-actions": "customer_action",
@@ -269,13 +276,27 @@ export default {
     if (origin && (origin === env.WEBSITE_ORIGIN || githubTest)) {
       Object.assign(cors, {
         "Access-Control-Allow-Origin": origin,
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Methods": taskId === OWNER_PUBLIC ? "GET, OPTIONS" : "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       });
     }
 
     if (!taskId) return json({ ok: false, code: "NOT_FOUND" }, 404, cors);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+    if (taskId === OWNER_PUBLIC) {
+      // Read-only feed of verified owner listings. Only listing fields leave the gateway; a short cache absorbs traffic.
+      if (request.method !== "GET") return json({ ok: false, code: "METHOD_NOT_ALLOWED" }, 405, cors);
+      if (!usesAppsScriptDirect(env, taskId)) return json({ ok: true, listings: [] }, 200, cors);
+      try {
+        const result = await callAppsScript(GATEWAY_ACTIONS[taskId], {}, env);
+        const listings = result.ok === true && Array.isArray(result.listings) ? result.listings.slice(0, 200) : null;
+        if (!listings) throw new GatewayFailure("GATEWAY_INVALID_RESPONSE");
+        return json({ ok: true, listings }, 200, { ...cors, "Cache-Control": "public, max-age=120" });
+      } catch (error) {
+        console.error("Apps Script gateway failed", { action: GATEWAY_ACTIONS[taskId], reason: failureCode(error) });
+        return json({ ok: false, code: "SERVICE_UNAVAILABLE" }, 503, cors);
+      }
+    }
     if (request.method !== "POST") return json({ ok: false, code: "METHOD_NOT_ALLOWED" }, 405, cors);
     if(env.AUTOMATION_ENVIRONMENT === "production" && env.PUBLIC_BOOKINGS_ENABLED !== "true" &&
       ["dwellhunt-viewing-booking","dwellhunt-viewing-buyer-actions"].includes(taskId))
@@ -313,7 +334,7 @@ export default {
         console.error("Turnstile configuration invalid", { reason: "invalid_website_origin" });
         return json({ ok: false, code: "SERVICE_UNAVAILABLE" }, 503, cors);
       }
-      const expectedAction = taskId === "dwellhunt-new-lead" ? "lead" : undefined;
+      const expectedAction = taskId === "dwellhunt-new-lead" ? "lead" : taskId === OWNER_LISTING ? "owner_listing" : undefined;
       const check = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET_KEY, expectedHostname, expectedAction);
       if (!check.ok) {
         console.warn("Turnstile verification rejected", {
@@ -330,11 +351,13 @@ export default {
       delete data["cf-turnstile-response"];
       }
     }
-    if (taskId === "dwellhunt-new-lead") {
+    if (taskId === "dwellhunt-new-lead" || taskId === OWNER_LISTING) {
       // Hidden "website" honeypot field: a filled value means a bot. Reply as if accepted and enqueue nothing.
       if (typeof data.website === "string" && data.website.trim()) return json({ ok: true }, 200, cors);
       delete data.website;
     }
+    if (taskId === OWNER_LISTING && !usesAppsScriptDirect(env, taskId))
+      return json({ ok: false, code: "SERVICE_UNAVAILABLE" }, 503, cors);
     if (taskId === "dwellhunt-new-lead" &&
         !(typeof data.email === "string" && data.email.trim()) &&
         !(typeof data.phone === "string" && data.phone.trim()))

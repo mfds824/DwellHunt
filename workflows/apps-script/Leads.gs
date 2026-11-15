@@ -425,6 +425,7 @@ function dhLeadMaintenance_() {
     try { processed += dhLeadOutcomes_(); props.setProperty(pre + 'LEAD_OUTCOME_DATE', today); }
     catch (e) { errors++; log('', 'LEAD_OUTCOMES_FAILED'); }
   }
+  try { processed += dhOwnerMaintenance_(); } catch (e) { errors++; log('', 'OWNER_MAINTENANCE_FAILED'); }
   const digest = dhLeadDigest_();
   processed += digest.processed; errors += digest.errors;
   const week = Utilities.formatDate(new Date(), 'Asia/Colombo', "YYYY-'W'ww");
