@@ -573,3 +573,54 @@ test('Lead maintenance checks outcomes daily and sends the report once on Monday
   assert.equal(outcomeRuns, 2); assert.equal(sent.telegram.length, 1);
   c.DH_VIEWING_CONTEXT_ = '';
 });
+
+function cancelHarness() {
+  const c = developmentHarness({ ...developmentSettings, DEV_DISABLE_TELEGRAM: 'false', DEV_TEST_TELEGRAM_ID: '222' });
+  const sent: any[] = [];
+  c.Utilities = { formatDate: () => 'Mon, 16 Nov 2026 · 18:00' };
+  c.tg = (method: string, data: any) => { sent.push([method, data]); return {}; };
+  c.save = () => {};
+  c.google = () => ({});
+  c.getEvent = () => ({ status: 'confirmed' });
+  c.MailApp = { sendEmail: () => {} };
+  const booking = (extra: Record<string, unknown> = {}): any => ({ booking_id: 'dh-test-1', booking_status: 'cancelling', property_title: 'Demo Villa',
+    customer_name: 'Test Buyer', email: 'test@example.test', agent_email: 'test@example.test', _calendar: 'test-calendar', _chat: '222',
+    viewing_datetime_utc: '2026-11-16T12:30:00.000Z', viewing_datetime_sri_lanka: '2026-11-16 18:00 +0530', _sent: {}, _jobs: [] as string[], ...extra });
+  return { c, sent, booking };
+}
+
+test('Cancelling a viewing queues a Telegram message for the agent and records who cancelled', () => {
+  const { c, booking } = cancelHarness();
+  const byBuyer = booking({ _cancelledBy: 'buyer' });
+  c.cancel(byBuyer);
+  assert.equal(byBuyer.booking_status, 'cancelled');
+  assert.equal(JSON.stringify(byBuyer._jobs), JSON.stringify(['cancelled', 'agent_cancelled']));
+  assert.equal(byBuyer._cancelledBy, 'buyer');
+  const moved = booking();
+  c.cancel(moved);
+  assert.equal(moved._cancelledBy, 'calendar');
+  assert.ok(moved._jobs.includes('agent_cancelled'));
+});
+
+test('Agent cancellation message says who cancelled, when and which booking', () => {
+  const { c, booking } = cancelHarness();
+  const buyer = c.dhCancelText_(booking({ booking_status: 'cancelled', _cancelledBy: 'buyer' }));
+  assert.equal(buyer, '❌ VIEWING CANCELLED BY BUYER\n🏠 Demo Villa\n📅 Mon, 16 Nov 2026 · 18:00 (Sri Lanka)\n👤 Test Buyer\n🆔 dh-test-1\nThe calendar event has been removed.');
+  assert.match(c.dhCancelText_(booking({ _cancelledBy: 'agent' })), /^❌ VIEWING CANCELLED BY AGENT/);
+  assert.match(c.dhCancelText_(booking({ _cancelledBy: 'calendar' })), /CALENDAR EVENT CHANGED[\s\S]*deleted or moved/);
+});
+
+test('The cancellation message is delivered once to the agent chat, and only for cancelled bookings', () => {
+  const { c, sent, booking } = cancelHarness();
+  const b = booking({ booking_status: 'cancelled', _cancelledBy: 'buyer', _jobs: ['agent_cancelled'] });
+  c.deliver(b, 'agent_cancelled');
+  const messages = sent.filter(([m]) => m === 'sendMessage');
+  assert.equal(messages.length, 1); assert.equal(messages[0][1].chat_id, '222');
+  assert.match(messages[0][1].text, /^❌ VIEWING CANCELLED BY BUYER/);
+  assert.ok(b._sent.agent_cancelled); assert.equal(b._jobs.length, 0);
+  c.deliver(b, 'agent_cancelled');
+  assert.equal(sent.filter(([m]) => m === 'sendMessage').length, 1);
+  const stillActive = booking({ booking_status: 'confirmed', _jobs: ['agent_cancelled'] });
+  c.deliver(stillActive, 'agent_cancelled');
+  assert.equal(sent.filter(([m]) => m === 'sendMessage').length, 1);
+});
