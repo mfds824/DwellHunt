@@ -65,3 +65,7 @@
 .dh-owner input[type=file] { max-width: 100%; font-size: 12px; }
 .dh-owner input[type=file]::file-selector-button { padding: 10px 12px; margin-right: 10px; border: 1px solid var(--color-emerald-800); border-radius: 10px; background: var(--color-emerald-50); color: var(--color-emerald-900); cursor: pointer; }
 @media (max-width: 480px) { .dh-owner-photos, .dh-owner-checks, .dh-owner-specs { grid-template-columns: 1fr; } .dh-owner-preview-content { padding: 16px; } }
+
+/* Hidden honeypot field (bots fill it, people never see it) and the security check on the review step. */
+.dh-owner .dh-hp{position:absolute!important;left:-10000px!important;width:1px;height:1px;overflow:hidden}
+.dh-owner .dh-captcha{min-height:65px;max-width:100%}
