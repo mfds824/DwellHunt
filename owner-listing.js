@@ -56,9 +56,9 @@ export function createOwnerStart(React) {
         h('fieldset', { className: 'space-y-3' }, h('legend', { className: 'text-xs font-bold text-stone-700 uppercase tracking-wider mb-2' }, 'I want to'),
           h('div', { className: 'grid grid-cols-2 gap-3' }, choice('owner-purpose', 'rent', purpose, setPurpose, 'Rent it out'), choice('owner-purpose', 'buy', purpose, setPurpose, 'Sell it'))),
         h('fieldset', { className: 'space-y-3' }, h('legend', { className: 'text-xs font-bold text-stone-700 uppercase tracking-wider mb-2' }, 'Property type'),
-          h('div', { className: 'grid grid-cols-2 sm:grid-cols-4 gap-3' }, Object.entries(CATEGORY_LABELS)
-            // House, Room / boarding and Commercial space are no longer offered to owners; their labels stay for saved drafts.
-            .filter(([value]) => !['house', 'room', 'commercial'].includes(value)).map(([value, text]) =>
+          h('div', { className: 'grid grid-cols-3 gap-3' }, Object.entries(CATEGORY_LABELS)
+            // House, Room / boarding, Commercial space and Land are no longer offered to owners; their labels stay for saved drafts.
+            .filter(([value]) => !['house', 'room', 'commercial', 'land'].includes(value)).map(([value, text]) =>
             choice('owner-category', value, category, setCategory, text)))),
         h('div', { className: 'flex flex-wrap items-center justify-between gap-4' },
           h('span', { className: 'dh-owner-hint', role: 'status' }, purpose && category ? `${purpose === 'buy' ? 'Selling' : 'Renting out'} · ${CATEGORY_LABELS[category]}` : 'Choose both options to continue'),

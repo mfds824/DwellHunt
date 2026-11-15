@@ -81,3 +81,9 @@
   background: #ffffff;
   color: #064e3b;
 }
+
+/* Narrow phones: three option cards per row, so the tick sits on the card's corner, clear of the label. */
+@media (max-width: 479px) {
+  .dh-listing-choice { padding-inline: 10px; }
+  .dh-listing-choice[data-selected="true"] .dh-listing-check { top: -7px; right: -7px; transform: none; width: 20px; height: 20px; font-size: 11px; background: #064e3b; color: #ffffff; border: 2px solid #ffffff; }
+}
