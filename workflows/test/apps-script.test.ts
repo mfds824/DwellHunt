@@ -700,7 +700,8 @@ test('With MEET_OPEN_ACCESS on, each viewing gets an Open Google Meet that anyon
   assert.equal(meetCalls[0].url, 'https://meet.googleapis.com/v2/spaces');
   assert.equal(JSON.stringify(meetCalls[0].body), JSON.stringify({ config: { accessType: 'OPEN', entryPointAccess: 'ALL' } }));
   const created = calls.find(x => x.method === 'post')!;
-  assert.equal(created.body.location, 'https://meet.google.com/abc-defg-hij');
+  assert.equal('location' in created.body, false);
+  assert.match(created.body.description, /Google Meet: https:\/\/meet\.google\.com\/abc-defg-hij/);
   assert.equal('conferenceData' in created.body, false);
   assert.equal(created.body.attendees.length, 1);
   assert.equal(booking.google_meet_link, 'https://meet.google.com/abc-defg-hij');
