@@ -9,7 +9,7 @@
     INVALID_REQUEST: 'Check your contact details and consent.',
     INVALID_LOCAL_DATETIME: 'Choose a valid date and time.',
     OUTSIDE_BOOKING_WINDOW: 'Choose a time at least one hour ahead and within 90 days.',
-    OUTSIDE_VIEWING_HOURS: 'Choose a 30-minute slot between 17:00 and 22:00 Sri Lanka time.',
+    OUTSIDE_VIEWING_HOURS: 'Choose a 30-minute slot between 09:00 and 18:00 Sri Lanka time.',
     TIMEZONE_CLARIFICATION_REQUIRED: 'Enter a valid time zone, such as Asia/Colombo.',
     AMBIGUOUS_LOCAL_TIME: 'This time occurs twice. Enter its UTC offset under clock-change clarification.',
     NONEXISTENT_LOCAL_TIME: 'Clocks change at this time. Choose another time.',
@@ -72,7 +72,7 @@
     dialog.setAttribute('aria-labelledby', 'dh-viewing-heading');
     dialog.innerHTML = `<header class="dh-form-header"><div class="dh-eyebrow">${icon}<span>DWELLHUNT VIRTUAL VIEWINGS</span></div><button class="dh-close" type="button" aria-label="Close booking form">×</button>
       <h2 id="dh-viewing-heading">${management ? 'Manage your viewing' : 'A closer look. Wherever you are.'}</h2><p>${management ? 'Your private booking, in your control.' : 'Meet your agent online and explore the details that matter.'}</p></header>
-      <div class="dh-form-content"><div class="dh-property-card"><span>${management ? 'YOUR BOOKING' : 'YOUR SELECTED PROPERTY'}</span><strong class="dh-property"></strong>${management ? '' : '<small>30 minutes · 17:00–22:00 Sri Lanka time</small>'}</div>
+      <div class="dh-form-content"><div class="dh-property-card"><span>${management ? 'YOUR BOOKING' : 'YOUR SELECTED PROPERTY'}</span><strong class="dh-property"></strong>${management ? '' : '<small>30 minutes · 09:00–18:00 Sri Lanka time</small>'}</div>
       ${window.DWELLHUNT_VIEWING?.testMode ? '<p class="dh-test-notice" role="note">Test booking only — use your verified DwellHunt test contact. This is not a live customer booking service.</p>' : ''}<form>${management ? manageFields : contactFields}<div class="dh-honey" aria-hidden="true"><input name="website" tabindex="-1" autocomplete="off"></div>
       <label class="dh-check"><input name="consent" type="checkbox" required><span>${management ? 'I confirm that I want to submit this booking change.' : 'I consent to booking emails, reminders and viewing follow-up.'}</span></label>
       <label class="dh-check dh-auto-close"><input name="auto_close" type="checkbox" checked><span>Close this form after a successful request.</span></label>
