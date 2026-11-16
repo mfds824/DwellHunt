@@ -641,31 +641,38 @@ export function createHomepage(
       h(OwnerFeed),
       h(
         "section",
-        { className: "dh-photo-guide" },
+        {
+          className: "dh-vision",
+          "aria-labelledby": "dh-vision-title",
+        },
         h(
           "div",
-          null,
-          h("p", { className: "dh-eyebrow" }, "Thoughtful presentation"),
-          h("h2", null, "Show the home as it is."),
+          { className: "dh-vision-panel" },
+          h("p", { className: "dh-vision-brand" }, "DwellHunt"),
           h(
-            "p",
-            null,
-            "Choose an actual property photo that clearly shows the space. Keep the camera level, frame rooms naturally and order photos like a walk through the home. Use gentle lighting and colour adjustments that stay true to the property.",
-          ),
-        ),
-        h(
-          "div",
-          null,
-          h("h3", null, "AI guidance · awaiting connection"),
-          h(
-            "p",
-            null,
-            "AI cover selection, framing and photo-order suggestions, natural lighting and colour adjustments, listing-copy drafting and missing-detail checks need a connected service before they can be offered here.",
+            "h2",
+            { id: "dh-vision-title", className: "dh-vision-tagline" },
+            "A Higher Way Home.",
           ),
           h(
-            "p",
-            null,
-            "Keep original photos available and review every suggested change. Never remove defects, add features or alter the property’s appearance.",
+            "div",
+            { className: "dh-vision-block" },
+            h("h3", null, "Our Vision"),
+            h(
+              "p",
+              null,
+              "To become Sri Lanka’s most trusted marketplace for apartment and condominium living.",
+            ),
+          ),
+          h(
+            "div",
+            { className: "dh-vision-block" },
+            h("h3", null, "Our Mission"),
+            h(
+              "p",
+              null,
+              "To connect people with the right homes through accurate listings, thoughtful guidance and seamless property journeys.",
+            ),
           ),
         ),
       ),

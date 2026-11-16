@@ -354,23 +354,84 @@
   font-size: 13px;
   margin-top: 5px;
 }
-.dh-photo-guide {
-  background: #17372c;
-  padding: 60px max(20px, calc((100vw - 1200px) / 2));
-  display: grid;
-  gap: 30px;
-  color: white;
+/* Vision & mission banner: photo as background, live text on a soft cream veil. */
+.dh-vision {
+  --dh-gold: #b08d57;
+  --dh-cream: 250, 244, 234;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  padding: calc(clamp(380px, 46vw, 460px) - 60px)
+    max(20px, calc((100vw - 1200px) / 2)) 56px;
+  background: rgb(var(--dh-cream));
+  overflow: hidden;
 }
-.dh-photo-guide p {
-  color: #d1dfd4;
-  font-size: 14px;
-  margin-top: 20px;
+/* Photo layer: cropped from the right so only the room and sea view show. */
+.dh-vision:before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: clamp(380px, 46vw, 460px);
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(var(--dh-cream), 0) 55%,
+      rgb(var(--dh-cream)) 100%
+    ),
+    url("assets/dwellhunt-vision-mission.webp");
+  background-size: cover, max(185%, 680px) auto;
+  background-position: center, 100% 60%;
+  background-repeat: no-repeat;
 }
-.dh-photo-guide .dh-eyebrow {
-  color: #bfd2c2 !important;
+.dh-vision-panel {
+  position: relative;
+  z-index: 1;
+  max-width: 520px;
 }
-.dh-photo-guide h3 {
-  font-size: 22px;
+.dh-home .dh-vision-brand {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(46px, 7vw, 84px);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: #123524;
+}
+.dh-home .dh-vision-tagline {
+  margin-top: 10px;
+  font-size: clamp(26px, 3.4vw, 40px);
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: #1d3a2c;
+}
+.dh-vision-block {
+  margin-top: 30px;
+  padding-top: 26px;
+  position: relative;
+}
+.dh-vision-block:before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 88px;
+  height: 2px;
+  background: var(--dh-gold);
+}
+.dh-home .dh-vision-block h3 {
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #123524;
+}
+.dh-home .dh-vision-block p {
+  margin-top: 10px;
+  font-size: clamp(17px, 1.6vw, 20px);
+  line-height: 1.6;
+  color: #2c3a33;
 }
 .dh-closing {
   text-align: center;
@@ -454,15 +515,37 @@
     grid-template-columns: 1fr 1fr;
     gap: 60px;
   }
-  .dh-photo-guide {
-    grid-template-columns: 1fr 1fr;
-    gap: 70px;
-  }
   .dh-hero-content {
     padding: 60px 32px;
   }
   .dh-hero-photo {
     height: auto;
+  }
+}
+@media (min-width: 1000px) {
+  .dh-vision {
+    align-items: center;
+    min-height: min(78vh, 720px);
+    padding-top: 90px;
+    padding-bottom: 90px;
+  }
+  .dh-vision:before {
+    left: 40%;
+    height: auto;
+    bottom: 0;
+    background-image:
+      linear-gradient(
+        90deg,
+        rgb(var(--dh-cream)) 0%,
+        rgba(var(--dh-cream), 0.6) 14%,
+        rgba(var(--dh-cream), 0) 34%
+      ),
+      url("assets/dwellhunt-vision-mission.webp");
+    background-size: cover, auto 125%;
+    background-position: center, 100% 55%;
+  }
+  .dh-vision-panel {
+    max-width: min(520px, calc(40vw - max(20px, (100vw - 1200px) / 2) - 24px));
   }
 }
 @media (min-width: 1100px) {
