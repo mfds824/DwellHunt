@@ -192,3 +192,16 @@ test('the gateway router accepts the agent actions and routes A| buttons to agen
   for (const action of ['agent_signup', 'agent_code', 'agent_verify', 'agent_me', 'agent_signout', 'agent_listing']) assert.match(code, new RegExp("'" + action + "'"));
   assert.match(code, /indexOf\('A\|'\)===0\)return dhAgentAction_\(q\)/);
 });
+
+test('publishing an agent listing sends the agent version of the "now live" email, without the owner Telegram link', () => {
+  const h = approvedAgent();
+  const { session } = signIn(h);
+  h.c.dhAgentListing_(listing(session));
+  const alert = h.telegram.find(m => m.data && /NEW AGENT LISTING/.test(m.data.text || ''));
+  h.c.agentAction({ callback_query: callback(alert.data.reply_markup.inline_keyboard[0][0].callback_data) });
+  const live = h.mail.at(-1);
+  assert.match(live.subject, /is now live/);
+  assert.match(live.body, /emailed to you[\s\S]*#agents/);
+  assert.doesNotMatch(live.body, /Telegram/);
+  assert.equal(h.sheets.DwellHunt_Owner_Telegram, undefined, 'no owner Telegram link was created');
+});
