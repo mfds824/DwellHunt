@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 import { createHash, randomUUID } from 'node:crypto';
 
 const read = (f: string) => readFileSync(new URL('../apps-script/' + f, import.meta.url), 'utf8');
-const source = ['Code.gs', 'Leads.gs', 'OwnerListings.gs', 'OwnerTelegram.gs', 'Agents.gs'].map(read).join('\n');
+const source = ['Code.gs', 'Leads.gs', 'OwnerListings.gs', 'OwnerTelegram.gs', 'Agents.gs', 'AgentProfiles.gs'].map(read).join('\n');
 
 function fakeSheet() {
   const rows: any[][] = [];
@@ -204,4 +204,59 @@ test('publishing an agent listing sends the agent version of the "now live" emai
   assert.match(live.body, /emailed to you[\s\S]*#agents/);
   assert.doesNotMatch(live.body, /Telegram/);
   assert.equal(h.sheets.DwellHunt_Owner_Telegram, undefined, 'no owner Telegram link was created');
+});
+
+const cloud = 'https://res.cloudinary.com/demo/image/upload/logo.jpg';
+test('an agent profile is public without contact details, and text is cleaned', () => {
+  const h = approvedAgent();
+  const { session } = signIn(h);
+  h.c.dhAgentProfileSave_({ session, bio: 'Colombo apartments <b>since 2014</b>. See https://spam.example.test now', areas: ['Colombo 05', 'Rajagiriya', ''], logo: cloud });
+  assert.throws(() => h.c.dhAgentProfileSave_({ session, bio: 'x', logo: 'https://evil.example.test/a.jpg' }), /INVALID_REQUEST/);
+  const pub = h.c.dhAgentPublic_({ id: 'AG-2611-0001' }).agent;
+  assert.equal(pub.agency, 'Lanka Homes Realty'); assert.equal(pub.logo, cloud); assert.deepEqual([...pub.areas], ['Colombo 05', 'Rajagiriya']);
+  assert.doesNotMatch(pub.bio, /<b>|https?:|spam/);
+  assert.doesNotMatch(JSON.stringify(pub), /kamal@agency|771234567/, 'no email or phone on the public profile');
+  assert.throws(() => h.c.dhAgentPublic_({ id: 'AG-2611-0099' }), /NOT_FOUND/);
+});
+
+test('posts and stories go live at once, the admin gets a Remove button, and stories expire after 24 hours', () => {
+  const h = approvedAgent();
+  const { session } = signIn(h);
+  assert.throws(() => h.c.dhAgentPost_({ session, kind: 'story', caption: 'No photo' }), /INVALID_REQUEST/);
+  const post = h.c.dhAgentPost_({ session, kind: 'post', caption: 'Open viewing on Saturday' });
+  const story = h.c.dhAgentPost_({ session, kind: 'story', caption: 'Just listed', photo: cloud });
+  assert.equal(post.status, 'posted');
+  const note = h.telegram.filter(m => /NEW AGENT (POST|STORY)/.test(m.data && m.data.text || ''));
+  assert.equal(note.length, 2); assert.equal(note[0].data.reply_markup.inline_keyboard[0][0].text, '🗑 Remove');
+  let pub = h.c.dhAgentPublic_({ id: 'AG-2611-0001' }).agent;
+  assert.equal(pub.posts.length, 1); assert.equal(pub.stories.length, 1);
+  const list = h.c.dhAgentsPublic_().agents;
+  assert.equal(list.length, 1); assert.equal(list[0].stories.length, 1);
+  const rows = h.sheets.DwellHunt_Agent_Posts.rows, col = (n: string) => h.c.DH_POST_COLUMNS.indexOf(n);
+  rows.find((r: any[]) => r[col('Post ID')] === story.reference)[col('Expires At')] = new Date(Date.now() - 1000).toISOString();
+  pub = h.c.dhAgentPublic_({ id: 'AG-2611-0001' }).agent;
+  assert.equal(pub.stories.length, 0, 'an expired story is hidden');
+  h.c.agentAction({ callback_query: callback(note[0].data.reply_markup.inline_keyboard[0][0].callback_data) });
+  assert.equal(h.c.dhAgentPublic_({ id: 'AG-2611-0001' }).agent.posts.length, 0, 'the admin Remove button hides the post');
+  assert.throws(() => h.c.agentAction({ callback_query: callback(note[0].data.reply_markup.inline_keyboard[0][0].callback_data, '111') }), /UNAUTHORIZED_AGENT/);
+});
+
+test('an agent can delete only their own posts, and the dashboard lists them with the profile', () => {
+  const h = approvedAgent();
+  const { session } = signIn(h);
+  const post = h.c.dhAgentPost_({ session, kind: 'post', caption: 'Market tip' });
+  const me = h.c.dhAgentMe_({ session });
+  assert.equal(me.posts.length, 1); assert.equal(me.posts[0].caption, 'Market tip'); assert.equal(typeof me.profile.bio, 'string');
+  assert.throws(() => h.c.dhAgentPostDelete_({ session, postId: 'PS-unknown' }), /NOT_FOUND/);
+  h.c.dhAgentPostDelete_({ session, postId: post.reference });
+  assert.equal(h.c.dhAgentMe_({ session }).posts.length, 0);
+});
+
+test('a Contact enquiry from a public profile is emailed to that agent', () => {
+  const h = approvedAgent();
+  signIn(h);
+  const before = h.mail.length;
+  h.c.dhAgentForwardLead_({ name: 'Buyer', email: 'b@example.test', phone: '', propertyId: 'AG-2611-0001', message: 'Do you have villas?', preferredDate: '' }, { priority: 'WARM' }, 'lead9');
+  assert.equal(h.mail.length, before + 1);
+  assert.match(h.mail.at(-1).subject, /from your DwellHunt profile/); assert.match(h.mail.at(-1).body, /Do you have villas\?/);
 });

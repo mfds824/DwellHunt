@@ -158,5 +158,5 @@ test('owners renew or close from Telegram, see /mylistings, and get reminders th
 
 test('the public feed and the agent dashboard skip the script lock; every other action still takes it', () => {
   const code = read('Code.gs');
-  assert.match(code, /p\.action !== 'owner_listings_public' && p\.action !== 'agent_me' && !lock\.tryLock\(1500\)/);
+  assert.match(code, /\['owner_listings_public', 'agent_me', 'agents_public', 'agent_public'\]\.indexOf\(p\.action\) < 0 && !lock\.tryLock\(1500\)/);
 });

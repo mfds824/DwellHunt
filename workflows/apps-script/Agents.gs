@@ -183,7 +183,8 @@ function dhAgentMe_(p) {
     reference: r[oc('Reference')], title: r[oc('Title')], status: r[oc('Status')], purpose: r[oc('Purpose')], category: r[oc('Category')],
     price: r[oc('Price')], currency: r[oc('Currency')], pricePeriod: r[oc('Price Period')], city: r[oc('City')], sentAt: r[oc('Date')],
     publishedAt: r[oc('Published At')], expiresAt: r[oc('Expires At')] }));
-  return { httpStatus: 200, status: 'signed_in', agent: { id: agent.id, name: agent.name, agency: agent.agency, email: agent.email, phone: agent.phone }, listings };
+  const extra = typeof dhProfileOf_ === 'function' ? { profile: dhProfileOf_(agent.id), posts: dhAgentMyPosts_(agent.id) } : {};
+  return { httpStatus: 200, status: 'signed_in', agent: { id: agent.id, name: agent.name, agency: agent.agency, email: agent.email, phone: agent.phone }, listings, ...extra };
 }
 function dhAgentSignOut_(p) {
   try { const found = dhAgentSession_(p.session); found.auth.getRange(found.authRow, dhAgentAuthCol_('Used At') + 1).setValue('signed out'); } catch (e) { /* already signed out */ }
@@ -201,14 +202,17 @@ function dhAgentListing_(p) {
 /** Emails a saved, non-spam buyer enquiry to the agent whose listing it is about. Failures are logged, never lost. */
 function dhAgentForwardLead_(lead, scored, id) {
   try {
-    if (!/^OL-\d{4}-\d{4}$/.test(lead.propertyId || '')) return '';
-    const oc = dhOwnerCol_, listing = dhOwnerRows_(dhOwnerSheet_()).find(r => r[oc('Reference')] === lead.propertyId);
-    if (!listing || !listing[oc('Agent ID')]) return '';
-    const found = dhAgentFind_('Agent ID', listing[oc('Agent ID')]);
+    // A lead names either an agent listing (OL-…) or, from a public profile's Contact form, the agent (AG-…).
+    const profileLead = /^AG-\d{4}-\d{4}$/.test(lead.propertyId || '');
+    if (!profileLead && !/^OL-\d{4}-\d{4}$/.test(lead.propertyId || '')) return '';
+    const oc = dhOwnerCol_, listing = profileLead ? null : dhOwnerRows_(dhOwnerSheet_()).find(r => r[oc('Reference')] === lead.propertyId);
+    if (!profileLead && (!listing || !listing[oc('Agent ID')])) return '';
+    const found = dhAgentFind_('Agent ID', profileLead ? lead.propertyId : listing[oc('Agent ID')]);
     if (!found || found.r[dhAgentCol_('Status')] !== 'approved') return '';
     const agent = dhAgentProfile_(found.r);
-    return dhAgentMail_(id, agent.email, 'New enquiry: ' + (listing[oc('Title')] || lead.propertyId) + ' (' + lead.propertyId + ')',
-      'Hi ' + agent.name + ',\n\nA buyer has enquired about your DwellHunt listing ' + lead.propertyId + ' “' + listing[oc('Title')] + '”.\n\n' +
+    const about = profileLead ? 'your DwellHunt profile' : 'your DwellHunt listing ' + lead.propertyId + ' “' + listing[oc('Title')] + '”';
+    return dhAgentMail_(id, agent.email, profileLead ? 'New enquiry from your DwellHunt profile' : 'New enquiry: ' + (listing[oc('Title')] || lead.propertyId) + ' (' + lead.propertyId + ')',
+      'Hi ' + agent.name + ',\n\nA buyer has contacted you through ' + about + '.\n\n' +
       'Name: ' + lead.name + '\nEmail: ' + (lead.email || '-') + '\nPhone / WhatsApp: ' + (lead.phone || '-') + '\nPriority: ' + scored.priority +
       (lead.preferredDate ? '\nPreferred date: ' + lead.preferredDate : '') + '\n\nMessage:\n' + (lead.message || '-') +
       '\n\nThe buyer agreed that DwellHunt and the listing agent may use these details to reply. Please contact them soon.\n\nDwellHunt');

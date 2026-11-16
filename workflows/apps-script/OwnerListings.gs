@@ -247,7 +247,9 @@ function dhOwnerListingsPublic_() {
   const listings = rows.filter(r => r[col('Status')] === 'published' && Date.parse(r[col('Expires At')]) > nowMs).map(r => {
     let pub = null;
     try { pub = JSON.parse(r[col('Public Listing')]); } catch (e) { pub = null; }
-    return pub && { ...pub, reference: r[col('Reference')], publishedAt: r[col('Published At')], expiresAt: r[col('Expires At')], verified: true };
+    // agentId links an agent's listing to their public profile (it is an opaque ID, not contact details).
+    return pub && { ...pub, reference: r[col('Reference')], publishedAt: r[col('Published At')], expiresAt: r[col('Expires At')], verified: true,
+      ...(r[col('Agent ID')] ? { agentId: r[col('Agent ID')] } : {}) };
   }).filter(Boolean);
   return { httpStatus: 200, listings };
 }

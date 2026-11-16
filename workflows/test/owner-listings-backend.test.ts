@@ -161,7 +161,7 @@ test('Development never alerts Telegram and only emails the Development test add
 
 test('the gateway router accepts the two owner actions in production', () => {
   const code = read('Code.gs');
-  assert.match(code, /'owner_listing','owner_listings_public'(,'agent_[a-z]+')*\]\.includes\(p\.action\)/);
+  assert.match(code, /'owner_listing','owner_listings_public'(,'agents?_[a-z_]+')*\]\.includes\(p\.action\)/);
   assert.match(code, /p\.action === 'owner_listing'\) r = dhOwnerListing_/);
   assert.match(code, /p\.action === 'owner_listings_public'\) r = dhOwnerListingsPublic_\(\)/);
   assert.match(read('Leads.gs'), /dhOwnerMaintenance_\(\)/);
