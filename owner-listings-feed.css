@@ -22,3 +22,15 @@
 .dh-ol-verified p { color: #50665a; margin: 6px 0 0; }
 .dh-ol-diligence { font-size: 12px; color: #50665a; background: #f6f8f6; border-left: 3px solid #d8e1da; padding: 8px 10px; margin: 10px 0 14px; }
 .dh-footer-note { display: block; flex-basis: 100%; max-width: 640px; font-size: 12px; line-height: 1.5; opacity: .8; margin-top: 6px; }
+
+/* Enquiry form on agent listings (the human check is added by lead-turnstile.js when it sends). */
+.dh-ol-enquiry { display: grid; gap: 10px; background: #f6f8f6; border: 1px solid #d8e1da; border-radius: 16px; padding: 16px; margin: 14px 0; }
+.dh-ol-enquiry h3 { margin: 0; font-size: 15px; color: #064e3b; }
+.dh-ol-enquiry label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: #3f5148; }
+.dh-ol-enquiry input:not([type="checkbox"]), .dh-ol-enquiry textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid #cdd9ce; background: #fff; font: inherit; font-weight: 400; font-size: 14px; color: #1c2b24; }
+.dh-ol-enquiry-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.dh-ol-enquiry-consent { display: flex !important; gap: 8px; align-items: flex-start; font-weight: 400 !important; }
+.dh-ol-enquiry-consent input { margin-top: 3px; accent-color: #064e3b; }
+.dh-ol-enquiry-error { color: #b91c1c; font-size: 13px; margin: 0; }
+.dh-ol-enquiry-done p { margin: 4px 0 0; color: #3f5148; font-size: 14px; }
+.dh-ol-enquiry .dh-button { justify-self: start; }
