@@ -130,6 +130,8 @@ export function createOwnerFeed(React) {
           h('p', { className: 'dh-price' }, ownerPriceText(l)),
           h('p', null, ownerPlace(l)),
           ownerFacts(l).length > 0 && h('p', { className: 'dh-ol-facts' }, ownerFacts(l).join(' · ')),
+          isAgentListing(l) && l.agentId && h('p', null, h('button', { type: 'button', className: 'dh-ap-link', onClick: () => { location.hash = 'agent=' + l.agentId; } },
+            `View ${(l.contact && l.contact.displayName) || 'the agent'}’s profile →`)),
           isAgentListing(l) && h(AgentEnquiry, { listing: l }),
           h('div', { className: 'dh-card-actions' },
             h('a', { className: isAgentListing(l) ? 'dh-text-button' : 'dh-button', href: ownerEnquiryUrl(l), target: '_blank', rel: 'noopener noreferrer' }, isAgentListing(l) ? 'Or ask DwellHunt on WhatsApp' : 'Enquire on WhatsApp'),
@@ -175,7 +177,10 @@ export function createOwnerFeed(React) {
           h('p', null, ownerPlace(l)),
           h('p', { className: 'dh-price' }, ownerPriceText(l)),
           ownerFacts(l).length > 0 && h('p', null, ownerFacts(l).join(' · ')),
-          h('p', { className: 'dh-agency' }, listerLabel(l)),
+          isAgentListing(l) && l.agentId
+            ? h('p', { className: 'dh-agency' }, 'Listed by ', h('button', { type: 'button', className: 'dh-ap-link', onClick: () => { location.hash = 'agent=' + l.agentId; } },
+                (l.contact && l.contact.displayName) || 'a verified agent'), ' · ✓ Verified agent')
+            : h('p', { className: 'dh-agency' }, listerLabel(l)),
           h('div', { className: 'dh-card-actions' },
             h('button', { type: 'button', className: 'dh-text-button', onClick: () => show(l.reference) }, 'View details'),
             isAgentListing(l) ? h('button', { type: 'button', className: 'dh-text-button', onClick: () => show(l.reference) }, 'Enquire')

@@ -1,6 +1,8 @@
 /* "List a property" page: a "Who's listing today?" chooser with agents first, the agent application, email-code
  * sign-in and the agent dashboard. Agents send listings through the owner form (owner-listing.js) with their session,
  * so every listing joins the same DwellHunt review. The backend is the Worker's /api/dwellhunt/agents/* routes. */
+import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
+
 const SESSION_KEY = 'dwellhunt_agent_session';
 const WHATSAPP_URL = 'https://wa.me/94770153678?text=' + encodeURIComponent('Hi DwellHunt, I would like to list a property development.');
 
@@ -28,7 +30,7 @@ export function agentMessage(code) {
   })[code] || 'Something went wrong on our side. Please try again in a few minutes, or message us on WhatsApp.';
 }
 
-const RETRYABLE = new Set(['verify', 'me', 'signout']);
+const RETRYABLE = new Set(['verify', 'me', 'signout', 'profile', 'posts', 'posts/delete']);
 /** POSTs to an agent route and returns the JSON body. Calls without a one-time human-check token are retried
  * a few times when the backend is briefly busy. Throws an Error whose message is safe to show. */
 export async function agentCall(path, body, fetchImpl = fetch, pause = ms => new Promise(r => setTimeout(r, ms))) {
@@ -211,15 +213,114 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
           h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Sending…' : 'Send application'))));
   }
 
+  /** Uploads one photo with the same checks as listing photos; returns its Cloudinary address. */
+  async function uploadPhoto(file) {
+    const problem = validatePropertyFile(file);
+    if (problem) throw new Error(problem);
+    return (await uploadPropertyFile(file)).url;
+  }
+
+  function ProfileEditor({ session, profile, onSaved }) {
+    const [f, setF] = React.useState({ bio: profile.bio || '', areas: (profile.areas || []).join(', '), logo: profile.logo || '' });
+    const [state, setState] = React.useState({ busy: false, message: '', ok: false });
+    const pick = React.useRef(null);
+    const a = session.agent || {};
+    const upload = async e => {
+      const file = e.target.files && e.target.files[0]; e.target.value = '';
+      if (!file) return;
+      setState({ busy: true, message: 'Uploading logo…', ok: false });
+      try { const url = await uploadPhoto(file); setF(o => ({ ...o, logo: url })); setState({ busy: false, message: 'Logo uploaded. Press Save to keep it.', ok: true }); }
+      catch (error) { setState({ busy: false, message: error.message || 'The logo could not be uploaded.', ok: false }); }
+    };
+    const save = async e => {
+      e.preventDefault(); setState({ busy: true, message: '', ok: false });
+      try {
+        await agentCall('profile', { session: session.session, bio: f.bio, areas: f.areas.split(',').map(x => x.trim()).filter(Boolean), logo: f.logo });
+        setState({ busy: false, message: 'Profile saved. Buyers can see it now.', ok: true }); onSaved();
+      } catch (error) { setState({ busy: false, message: error.message, ok: false }); }
+    };
+    return h('form', { className: 'dh-agent-panel', onSubmit: save },
+      h('div', { className: 'dh-agent-panel-head' }, h('h2', { className: 'dh-agent-h2' }, 'Your public profile'),
+        a.id && h('a', { className: 'dh-agent-link', href: './#agent=' + a.id, target: '_blank', rel: 'noopener' }, 'View public profile ↗')),
+      h('div', { className: 'dh-agent-logo-row' },
+        h('span', { className: 'dh-agent-logo' }, f.logo ? h('img', { src: f.logo, alt: '' }) : String(a.agency || '?').slice(0, 2).toUpperCase()),
+        h('input', { ref: pick, type: 'file', accept: 'image/jpeg,image/png,image/webp', hidden: true, onChange: upload }),
+        h('button', { type: 'button', className: secondary, onClick: () => pick.current && pick.current.click(), disabled: state.busy }, f.logo ? 'Change logo' : 'Add logo'),
+        f.logo && h('button', { type: 'button', className: 'dh-agent-link', onClick: () => setF(o => ({ ...o, logo: '' })) }, 'Remove')),
+      h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-bio' }, 'About your agency'),
+        h('textarea', { id: 'dh-agent-bio', rows: 3, maxLength: 600, value: f.bio, onChange: e => setF(o => ({ ...o, bio: e.target.value })), placeholder: 'What you specialise in, how long you have worked, languages you speak…' })),
+      h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-areas' }, 'Areas you cover (separate with commas)'),
+        h('input', { id: 'dh-agent-areas', value: f.areas, onChange: e => setF(o => ({ ...o, areas: e.target.value })), placeholder: 'Colombo 05, Colombo 07, Rajagiriya' })),
+      state.message && h('p', { role: 'status', className: state.ok ? 'dh-agent-notice' : 'dh-agent-error' }, state.message),
+      h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Saving…' : 'Save profile'));
+  }
+
+  function PostComposer({ session, listings, onPosted }) {
+    const [f, setF] = React.useState({ kind: 'post', caption: '', photo: '', listingRef: '' });
+    const [state, setState] = React.useState({ busy: false, message: '', ok: false });
+    const pick = React.useRef(null);
+    const live = listings.filter(l => l.status === 'published');
+    const upload = async e => {
+      const file = e.target.files && e.target.files[0]; e.target.value = '';
+      if (!file) return;
+      setState({ busy: true, message: 'Uploading photo…', ok: false });
+      try { const url = await uploadPhoto(file); setF(o => ({ ...o, photo: url })); setState({ busy: false, message: '', ok: false }); }
+      catch (error) { setState({ busy: false, message: error.message || 'The photo could not be uploaded.', ok: false }); }
+    };
+    const publish = async e => {
+      e.preventDefault();
+      if (f.kind === 'story' && !f.photo) { setState({ busy: false, message: 'A story needs a photo.', ok: false }); return; }
+      if (!f.caption.trim() && !f.photo) { setState({ busy: false, message: 'Write something or add a photo.', ok: false }); return; }
+      setState({ busy: true, message: '', ok: false });
+      try {
+        await agentCall('posts', { session: session.session, kind: f.kind, caption: f.caption, photo: f.photo, listingRef: f.listingRef });
+        setF({ kind: f.kind, caption: '', photo: '', listingRef: '' });
+        setState({ busy: false, message: f.kind === 'story' ? 'Story is live for 24 hours.' : 'Post is live on your profile.', ok: true }); onPosted();
+      } catch (error) { setState({ busy: false, message: error.message, ok: false }); }
+    };
+    return h('form', { className: 'dh-agent-panel', onSubmit: publish },
+      h('h2', { className: 'dh-agent-h2' }, 'New post'),
+      h('div', { className: 'dh-agent-tabs', role: 'radiogroup', 'aria-label': 'Post type' },
+        h('button', { type: 'button', role: 'radio', 'aria-checked': f.kind === 'post', className: f.kind === 'post' ? 'is-active' : '', onClick: () => setF(o => ({ ...o, kind: 'post' })) }, 'Post · stays on profile'),
+        h('button', { type: 'button', role: 'radio', 'aria-checked': f.kind === 'story', className: f.kind === 'story' ? 'is-active' : '', onClick: () => setF(o => ({ ...o, kind: 'story' })) }, 'Story · 24 hours')),
+      h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-caption' }, 'Caption'),
+        h('textarea', { id: 'dh-agent-caption', rows: 3, maxLength: 500, value: f.caption, onChange: e => setF(o => ({ ...o, caption: e.target.value })),
+          placeholder: f.kind === 'story' ? 'Open viewing today 4–6 pm' : 'Just listed: 2-bedroom apartment near the park…' })),
+      h('div', { className: 'dh-agent-logo-row' },
+        f.photo ? h('img', { className: 'dh-agent-post-photo', src: f.photo, alt: '' }) : null,
+        h('input', { ref: pick, type: 'file', accept: 'image/jpeg,image/png,image/webp', hidden: true, onChange: upload }),
+        h('button', { type: 'button', className: secondary, onClick: () => pick.current && pick.current.click(), disabled: state.busy }, f.photo ? 'Change photo' : 'Add photo'),
+        f.photo && h('button', { type: 'button', className: 'dh-agent-link', onClick: () => setF(o => ({ ...o, photo: '' })) }, 'Remove')),
+      live.length > 0 && h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-link-listing' }, 'Link to one of your live listings (optional)'),
+        h('select', { id: 'dh-agent-link-listing', value: f.listingRef, onChange: e => setF(o => ({ ...o, listingRef: e.target.value })) },
+          h('option', { value: '' }, 'No listing'), live.map(l => h('option', { key: l.reference, value: l.reference }, `${l.reference} · ${l.title}`)))),
+      h('p', { className: 'dh-agent-meta' }, 'Posts go live straight away. Links are removed, and DwellHunt may take down anything that breaks the rules.'),
+      state.message && h('p', { role: 'status', className: state.ok ? 'dh-agent-notice' : 'dh-agent-error' }, state.message),
+      h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Publishing…' : f.kind === 'story' ? 'Publish story' : 'Publish post'));
+  }
+
+  function MyPosts({ session, posts, onChanged }) {
+    const [busy, setBusy] = React.useState('');
+    if (!posts.length) return null;
+    const remove = async id => { setBusy(id); try { await agentCall('posts/delete', { session: session.session, postId: id }); onChanged(); } catch { /* the list refreshes on the next load */ } setBusy(''); };
+    return h('div', { className: 'dh-agent-panel' }, h('h2', { className: 'dh-agent-h2' }, 'Your posts'),
+      h('ul', { className: 'dh-agent-list' }, posts.map(p => h('li', { key: p.id },
+        h('div', null, h('p', { className: 'dh-agent-title' }, p.caption || '(photo)'),
+          h('p', { className: 'dh-agent-meta' }, `${p.kind === 'story' ? (p.expired ? 'Story · ended' : 'Story · live 24 h') : 'Post'} · ${niceDate(p.at)}`)),
+        h('button', { type: 'button', className: 'dh-agent-link', disabled: busy === p.id, onClick: () => remove(p.id) }, busy === p.id ? 'Deleting…' : 'Delete')))));
+  }
+
   function Dashboard({ session, onCreate, onSignedOut }) {
-    const [data, setData] = React.useState({ loading: true, listings: [], message: '' });
+    const [data, setData] = React.useState({ loading: true, listings: [], posts: [], profile: null, message: '' });
+    const [tick, setTick] = React.useState(0);
+    const refresh = () => setTick(t => t + 1);
     React.useEffect(() => {
       let live = true;
       agentCall('me', { session: session.session })
-        .then(r => { if (live) setData({ loading: false, listings: r.listings || [], message: '' }); })
-        .catch(error => { if (!live) return; if (error.code === 'SIGNED_OUT') { clearAgentSession(); onSignedOut(); } else setData({ loading: false, listings: [], message: error.message }); });
+        .then(r => { if (live) setData({ loading: false, listings: r.listings || [], posts: r.posts || [], profile: r.profile || { bio: '', areas: [], logo: '' }, message: '' }); })
+        .catch(error => { if (!live) return; if (error.code === 'SIGNED_OUT') { clearAgentSession(); onSignedOut(); } else setData(o => ({ ...o, loading: false, message: error.message })); });
       return () => { live = false; };
-    }, [session.session]);
+    }, [session.session, tick]);
     const signOut = () => { agentCall('signout', { session: session.session }).catch(() => {}); clearAgentSession(); onSignedOut(); };
     const a = session.agent || {};
     return shell(
@@ -241,7 +342,11 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
               h('div', { className: 'dh-agent-status', 'data-status': l.status },
                 AGENT_STATUS_LABELS[l.status] || l.status,
                 l.status === 'published' && l.expiresAt ? h('small', null, 'until ' + niceDate(l.expiresAt)) : null,
-                l.status === 'pending review' && l.sentAt ? h('small', null, 'sent ' + niceDate(l.sentAt)) : null))))));
+                l.status === 'pending review' && l.sentAt ? h('small', null, 'sent ' + niceDate(l.sentAt)) : null))))),
+      !data.loading && data.profile && h('div', { className: 'dh-agent-panels' },
+        h(PostComposer, { session, listings: data.listings, onPosted: refresh }),
+        h(MyPosts, { session, posts: data.posts, onChanged: refresh }),
+        h(ProfileEditor, { key: 'profile', session, profile: data.profile, onSaved: refresh })));
   }
 
   function AgentPortal({ onBack }) {
