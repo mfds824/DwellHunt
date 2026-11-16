@@ -154,7 +154,6 @@ export function createListingPage(React, d) {
   return function ListingPage({ listing: l, others = [], onClose, onOpen }) {
     const page = React.useRef(null);
     const [lightbox, setLightbox] = React.useState(-1);
-    const [more, setMore] = React.useState(false);
     const [shared, setShared] = React.useState('');
     const photos = l.photos.map((p, n) => ({ url: d.safeImage(p && p.url), label: (p && p.caption) || `photo ${n + 1}` })).filter(p => p.url);
     const plan = d.safeImage(l.floorPlan);
@@ -163,8 +162,6 @@ export function createListingPage(React, d) {
     const lister = (l.contact && l.contact.displayName) || (agent ? 'A DwellHunt agent' : 'Private owner');
     const place = titleCase(d.ownerPlace(l));
     const mapQuery = [l.location && l.location.building, l.location && l.location.address, l.location && l.location.city, l.location && l.location.district, 'Sri Lanka'].filter(Boolean).join(', ');
-    const description = String(l.description || '');
-    const longText = description.length > 420;
     const chips = [
       [d.CATEGORY[l.category] || 'Property', l.apartmentType ? titleCase(l.apartmentType) : ''],
       [LABEL.furnishing[l.furnishing] || '', ''],
@@ -223,17 +220,13 @@ export function createListingPage(React, d) {
             h('p', { className: 'dh-lp-address' }, place),
             chips.length > 0 && h('ul', { className: 'dh-lp-chips' }, chips.map(([a, b], n) => h('li', { key: n }, h('strong', null, a), b && h('span', null, b)))),
 
-            (description || (l.features || []).length > 0) && h('section', { className: 'dh-lp-section' },
-              h('h2', null, 'What’s special'),
-              Array.isArray(l.features) && l.features.length > 0 && h('ul', { className: 'dh-lp-tags' }, l.features.map(f => h('li', { key: f }, f))),
-              description && h('div', { className: 'dh-lp-desc' + (longText && !more ? ' is-clamped' : '') }, description.split(/\n{2,}/).map((part, n) => h('p', { key: n }, part))),
-              longText && h('button', { type: 'button', className: 'dh-lp-more', onClick: () => setMore(!more), 'aria-expanded': more }, more ? 'Show less' : 'Show more')),
-
             h('section', { className: 'dh-lp-section' },
               h('h2', null, 'Facts & features'),
               h('div', { className: 'dh-lp-groups' }, factGroups(l, d.CATEGORY).map(([title, rows]) => h('div', { key: title, className: 'dh-lp-group' },
                 h('h3', null, title),
-                h('dl', null, rows.flatMap(([k, v]) => [h('dt', { key: k + 't' }, k), h('dd', { key: k + 'd' }, v)])))))),
+                h('dl', null, rows.flatMap(([k, v]) => [h('dt', { key: k + 't' }, k), h('dd', { key: k + 'd' }, v)]))))),
+              Array.isArray(l.features) && l.features.length > 0 && h('div', { className: 'dh-lp-group dh-lp-features' },
+                h('h3', null, 'Features'), h('ul', { className: 'dh-lp-tags' }, l.features.map(f => h('li', { key: f }, f))))),
 
             plan && h('section', { className: 'dh-lp-section' },
               h('h2', null, 'Floor plan'),

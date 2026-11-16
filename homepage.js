@@ -1,5 +1,5 @@
 import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings, locationSuggestions, locationQuery } from "./homepage-search.js?v=20261115-loc1";
-import { createOwnerFeed } from "./owner-listings-feed.js?v=20261117-lp1";
+import { createOwnerFeed } from "./owner-listings-feed.js?v=20261117-lp2";
 import { createAgentProfiles } from "./agent-profiles.js?v=20261116-pr1";
 // Homepage presentation only. Marketplace state, routes and integrations remain in app.js.
 export function createHomepage(

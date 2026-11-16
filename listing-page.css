@@ -45,7 +45,8 @@
 
 .dh-lp-section { border-top: 1px solid #e3e9e4; margin-top: 28px; padding-top: 24px; }
 .dh-lp-section > h2 { margin: 0 0 14px; font-size: 21px; font-weight: 900; color: #0b1f18; }
-.dh-lp-tags { list-style: none; padding: 0; margin: 0 0 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+.dh-lp-features { margin-top: 22px; }
+.dh-lp-tags { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .dh-lp-tags li { background: #dff3e8; color: #064e3b; font-weight: 700; font-size: 13px; border-radius: 999px; padding: 6px 12px; }
 .dh-lp-desc p { white-space: pre-line; font-size: 15px; line-height: 1.7; margin: 0 0 10px; color: #26392f; }
 .dh-lp-desc.is-clamped { max-height: 9.5em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
