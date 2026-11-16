@@ -10,6 +10,12 @@ const ROUTES: Record<string, string> = {
   "/api/dwellhunt/leads": "dwellhunt-new-lead",
   "/api/dwellhunt/owner-listings": "dwellhunt-owner-listing",
   "/api/dwellhunt/owner-listings/public": "dwellhunt-owner-listings-public",
+  "/api/dwellhunt/agents/signup": "dwellhunt-agent-signup",
+  "/api/dwellhunt/agents/code": "dwellhunt-agent-code",
+  "/api/dwellhunt/agents/verify": "dwellhunt-agent-verify",
+  "/api/dwellhunt/agents/me": "dwellhunt-agent-me",
+  "/api/dwellhunt/agents/signout": "dwellhunt-agent-signout",
+  "/api/dwellhunt/agents/listings": "dwellhunt-agent-listing",
   "/api/dwellhunt/bookings": "dwellhunt-viewing-booking",
   "/api/dwellhunt/agent": "dwellhunt-viewing-agent-approval",
   "/api/dwellhunt/buyer-actions": "dwellhunt-viewing-buyer-actions",
@@ -23,6 +29,33 @@ const MAX_BODY_BYTES = 65_536;
 // Owner listings are served only by the Apps Script gateway; there is no Trigger.dev task for them.
 const OWNER_LISTING = "dwellhunt-owner-listing";
 const OWNER_PUBLIC = "dwellhunt-owner-listings-public";
+// Agent accounts (Apps Script Agents.gs). Applying, asking for a code and sending a listing need a human check;
+// checking a code and reading or ending a session rely on the code's attempt limit or the session token instead.
+const AGENT_TASKS: Record<string, string> = {
+  "dwellhunt-agent-signup": "agent_signup", "dwellhunt-agent-code": "agent_code", "dwellhunt-agent-verify": "agent_verify",
+  "dwellhunt-agent-me": "agent_me", "dwellhunt-agent-signout": "agent_signout", "dwellhunt-agent-listing": "agent_listing",
+};
+const AGENT_TURNSTILE_ACTIONS: Record<string, string> = {
+  "dwellhunt-agent-signup": "agent_signup", "dwellhunt-agent-code": "agent_signin", "dwellhunt-agent-listing": "owner_listing",
+};
+const AGENT_SESSION_TASKS = new Set(["dwellhunt-agent-me", "dwellhunt-agent-signout", "dwellhunt-agent-listing"]);
+/** Only these fields of an agent reply reach the browser. */
+export function agentSafeResponse(value: unknown) {
+  const safe = safeResponse(value);
+  const r = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  if (typeof r.session === "string" && /^[a-f0-9]{64}$/.test(r.session)) safe.session = r.session;
+  if (typeof r.expires === "string") safe.expires = r.expires.slice(0, 40);
+  if (r.agent && typeof r.agent === "object") {
+    const a = r.agent as Record<string, unknown>;
+    safe.agent = Object.fromEntries(["id", "name", "agency", "email"].map(k => [k, String(a[k] ?? "").slice(0, 254)]));
+  }
+  if (Array.isArray(r.listings)) safe.listings = r.listings.slice(0, 100).map(item => {
+    const l = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return Object.fromEntries(["reference", "title", "status", "purpose", "category", "price", "currency", "pricePeriod", "city", "sentAt", "publishedAt", "expiresAt"]
+      .map(k => [k, String(l[k] ?? "").slice(0, 200)]));
+  });
+  return safe;
+}
 const TASK_TIMEOUT_MS = 90_000;
 const TERMINAL_FAILURES = new Set(["FAILED", "CRASHED", "CANCELED", "INTERRUPTED", "SYSTEM_FAILURE"]);
 
@@ -149,6 +182,7 @@ const GATEWAY_ACTIONS: Record<string, string> = {
   "dwellhunt-lead-digest": "lead_digest",
   [OWNER_LISTING]: "owner_listing",
   [OWNER_PUBLIC]: "owner_listings_public",
+  ...AGENT_TASKS,
   "dwellhunt-viewing-booking": "intake",
   "dwellhunt-viewing-agent-approval": "telegram",
   "dwellhunt-viewing-buyer-actions": "customer_action",
@@ -318,7 +352,9 @@ export default {
       return json({ ok: false, code: "INVALID_PAYLOAD" }, 400, cors);
 
     const data = payload as Record<string, unknown>;
-    if (taskId !== "dwellhunt-viewing-agent-approval") {
+    if (AGENT_SESSION_TASKS.has(taskId) && !(typeof data.session === "string" && /^[a-f0-9]{64}$/.test(data.session)))
+      return json({ ok: false, code: "SIGNED_OUT" }, 401, cors);
+    if (taskId !== "dwellhunt-viewing-agent-approval" && !["dwellhunt-agent-verify", "dwellhunt-agent-me", "dwellhunt-agent-signout"].includes(taskId)) {
       const turnstileToken = data.turnstile_token ?? data.turnstileToken ?? data["cf-turnstile-response"];
       if (taskId === "dwellhunt-viewing-booking" || taskId === "dwellhunt-viewing-buyer-actions") {
         // Apps Script is the sole Siteverify verifier for bookings and management actions. Forward the fresh token
@@ -334,7 +370,7 @@ export default {
         console.error("Turnstile configuration invalid", { reason: "invalid_website_origin" });
         return json({ ok: false, code: "SERVICE_UNAVAILABLE" }, 503, cors);
       }
-      const expectedAction = taskId === "dwellhunt-new-lead" ? "lead" : taskId === OWNER_LISTING ? "owner_listing" : undefined;
+      const expectedAction = taskId === "dwellhunt-new-lead" ? "lead" : taskId === OWNER_LISTING ? "owner_listing" : AGENT_TURNSTILE_ACTIONS[taskId];
       const check = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET_KEY, expectedHostname, expectedAction);
       if (!check.ok) {
         console.warn("Turnstile verification rejected", {
@@ -351,12 +387,12 @@ export default {
       delete data["cf-turnstile-response"];
       }
     }
-    if (taskId === "dwellhunt-new-lead" || taskId === OWNER_LISTING) {
+    if (taskId === "dwellhunt-new-lead" || taskId === OWNER_LISTING || taskId === "dwellhunt-agent-signup" || taskId === "dwellhunt-agent-listing") {
       // Hidden "website" honeypot field: a filled value means a bot. Reply as if accepted and enqueue nothing.
       if (typeof data.website === "string" && data.website.trim()) return json({ ok: true }, 200, cors);
       delete data.website;
     }
-    if (taskId === OWNER_LISTING && !usesAppsScriptDirect(env, taskId))
+    if ((taskId === OWNER_LISTING || taskId in AGENT_TASKS) && !usesAppsScriptDirect(env, taskId))
       return json({ ok: false, code: "SERVICE_UNAVAILABLE" }, 503, cors);
     if (taskId === "dwellhunt-new-lead" &&
         !(typeof data.email === "string" && data.email.trim()) &&
@@ -365,7 +401,8 @@ export default {
 
     if (usesAppsScriptDirect(env, taskId)) {
       try {
-        const safe = safeResponse(await callAppsScript(GATEWAY_ACTIONS[taskId], data, env));
+        const result = await callAppsScript(GATEWAY_ACTIONS[taskId], data, env);
+        const safe = taskId in AGENT_TASKS ? agentSafeResponse(result) : safeResponse(result);
         return json(safe, Number(safe.httpStatus), cors);
       } catch (error) {
         console.error("Apps Script gateway failed", { action: GATEWAY_ACTIONS[taskId], reason: failureCode(error) });
