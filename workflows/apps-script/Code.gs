@@ -44,7 +44,7 @@ function dhHandlePost_(e) {
     if(p.environment==='production' && !['intake','telegram','customer_action','reminders','followup','viewing_health','lead','lead_digest','meet_readiness','owner_listing','owner_listings_public','agent_signup','agent_code','agent_verify','agent_me','agent_signout','agent_listing'].includes(p.action))fail('INVALID_ACTION',400);
     DH_VIEWING_CONTEXT_=p.environment==='production'?'production':'';
     lock = LockService.getScriptLock();
-    if (p.action !== 'owner_listings_public' && !lock.tryLock(1500)) fail('BUSY_RETRY', 503);
+    if (p.action !== 'owner_listings_public' && p.action !== 'agent_me' && !lock.tryLock(1500)) fail('BUSY_RETRY', 503); // read-only actions skip the lock
     var r;
     if (p.action === 'intake') r = intake(p.payload || {});
     else if (p.action === 'telegram') r = agentAction(p.payload || {});

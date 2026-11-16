@@ -156,7 +156,7 @@ test('owners renew or close from Telegram, see /mylistings, and get reminders th
   assert.equal(h.c.agentAction(press(OWNER, 'M|OL-2611-0001|n')).ignored, true, 'a closed listing cannot be renewed by the owner');
 });
 
-test('the public feed skips the script lock; every other action still takes it', () => {
+test('the public feed and the agent dashboard skip the script lock; every other action still takes it', () => {
   const code = read('Code.gs');
-  assert.match(code, /p\.action !== 'owner_listings_public' && !lock\.tryLock\(1500\)/);
+  assert.match(code, /p\.action !== 'owner_listings_public' && p\.action !== 'agent_me' && !lock\.tryLock\(1500\)/);
 });
