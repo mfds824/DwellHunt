@@ -1,0 +1,19 @@
+{
+ "$schema":"./node_modules/wrangler/config-schema.json",
+ "name":"dwellhunt-listings-api",
+ "account_id":"599edd273f1d6be4bd6da48bdabb7961",
+ "main":"cloudflare/listings-worker.ts",
+ "compatibility_date":"2026-11-12",
+ "workers_dev":true,
+ "vars":{
+  "WEBSITE_ORIGIN":"https://mfds824.github.io",
+  "LISTINGS_ENABLED":"false",
+  "LISTING_PUBLICATION_ENABLED":"false",
+  "LISTING_TEST_MODE":"true",
+  "LISTING_AUTOMATION_ENABLED":"true",
+  "LISTING_SITE_URL":"https://mfds824.github.io/DwellHunt/"
+ },
+  "triggers":{"crons":["* * * * *"]},
+ "observability":{"enabled":true,"logs":{"enabled":true,"invocation_logs":false},"traces":{"enabled":true}},
+  "secrets":{"required":["LISTING_SUPABASE_URL","LISTING_SUPABASE_SECRET_KEY","LISTING_SUPABASE_PUBLISHABLE_KEY","LISTING_TEST_OWNER_IDS","APPS_SCRIPT_EXEC_URL","APPS_SCRIPT_AUTH_BODY_JSON","SUPABASE_SEND_EMAIL_HOOK_SECRET"]}
+}

@@ -1,0 +1,35 @@
+/* Scoped to outrank the compiled app reset; retain the existing booking hook. */
+#root button.dh-viewing-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .65rem;
+  width: 100%;
+  margin: 0 0 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid #064e3b;
+  border-radius: .85rem;
+  background: #064e3b;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px #064e3b20;
+}
+#root button.dh-viewing-button::before {
+  content: "";
+  display: block;
+  width: 1.3rem;
+  height: 1.3rem;
+  flex: 0 0 auto;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 5h12a2 2 0 0 1 2 2v2l5-3v12l-5-3v2a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 5h12a2 2 0 0 1 2 2v2l5-3v12l-5-3v2a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+#root button.dh-viewing-button:hover { background: #065f46; }
+#root button.dh-viewing-button:focus-visible { outline: 3px solid #b97700; outline-offset: 3px; }
+
+#dh-viewing{margin:auto;padding:1.4rem;width:min(94vw,580px);max-height:90dvh;overflow:auto;border:1px solid #a7c8bc;border-radius:1rem;background:#fff;color:#15332c;z-index:100000}
+#dh-viewing::backdrop{background:#0009}#dh-viewing h2{font-size:1.4rem;font-weight:800}#dh-viewing p{margin:.8rem 0}#dh-viewing label{display:block;margin:.8rem 0;font-weight:600}#dh-viewing input:not([type=checkbox]),#dh-viewing textarea{display:block;width:100%;padding:.65rem;border:1px solid #78958b;border-radius:.4rem;background:white;color:#15332c;font:inherit}#dh-viewing button{padding:.7rem 1rem;border-radius:.5rem;background:#064e3b;color:white;cursor:pointer}#dh-viewing button:disabled{opacity:.5;cursor:wait}#dh-viewing :focus-visible{outline:3px solid #b97700;outline-offset:3px}#dh-viewing .dh-close{float:right}#dh-viewing .dh-honey{display:none}#dh-viewing [role=status]{white-space:pre-wrap}#dh-viewing small{font-weight:400}

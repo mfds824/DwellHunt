@@ -1,0 +1,742 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
+
+const source = readFileSync(new URL('../apps-script/doPost.gs', import.meta.url), 'utf8');
+function harness(options: { auth?: string; bookingError?: Error; releaseFails?: boolean } = {}) {
+  let calls = 0;
+  const logs: string[] = [];
+  const context = {
+    ContentService: { MimeType: { JSON: 'application/json' }, createTextOutput: (body: string) => ({
+      setMimeType: () => JSON.parse(body),
+    }) },
+    cfg: () => 'test-only-secret', equal: (a: unknown, b: unknown) => a === b,
+    fail: (code: string, status: number) => { throw Object.assign(new Error(code), {publicCode: code, httpStatus: status}); },
+    LockService: { getScriptLock: () => ({ tryLock: () => true, hasLock: () => true,
+      releaseLock: () => { if (options.releaseFails) throw new Error('private cleanup details'); } }) },
+    log: (_id: string, code: string) => logs.push(code),
+    intake: () => { calls++; if (options.bookingError) throw options.bookingError;
+      return { httpStatus: 202, booking_id: 'mock-only' }; },
+  };
+  runInNewContext(source, context);
+  const handler = (context as unknown as { doPost: (e: unknown) => Record<string, unknown> }).doPost;
+  return { invoke: () => handler({postData: {contents: JSON.stringify({gatewaySecret: options.auth ?? 'test-only-secret', action: 'intake', payload: {}})}}), logs, calls: () => calls };
+}
+
+test('Apps Script rejects incorrect gateway authentication before booking code', () => {
+  const h = harness({auth: 'wrong'});
+  assert.equal(h.invoke().code, 'UNAUTHORIZED');
+  assert.equal(h.calls(), 0);
+});
+test('Apps Script retains business rejection and does not reveal raw exception text', () => {
+  const publicError = Object.assign(new Error('private text'), {publicCode: 'HUMAN_VERIFICATION_FAILED', httpStatus: 403});
+  assert.equal(harness({bookingError: publicError}).invoke().httpStatus, 403);
+  const h = harness({bookingError: new Error('private token and buyer details')});
+  assert.equal(h.invoke().diagnostic_code, 'GATEWAY_UNEXPECTED_ERROR');
+  assert.doesNotMatch(JSON.stringify(h.logs), /private|token|buyer/);
+});
+test('Apps Script reports allowlisted internal failures and protects results from cleanup errors', () => {
+  const h = harness({bookingError: new Error('CALENDAR_ACCESS_FAILED'), releaseFails: true});
+  assert.equal(h.invoke().diagnostic_code, 'CALENDAR_ACCESS_FAILED');
+  assert.ok(h.logs.includes('LOCK_RELEASE_FAILED'));
+  assert.equal(harness({releaseFails: true}).invoke().booking_id, 'mock-only');
+});
+
+const completeSource = readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
+test('Apps Script manifest declares the identity permission required by manual operator checks', () => {
+  const manifest=JSON.parse(readFileSync(new URL('../apps-script/appsscript.json',import.meta.url),'utf8'));
+  for (const scope of ['spreadsheets','calendar','script.external_request','script.send_mail','userinfo.email'])
+    assert.ok(manifest.oauthScopes.includes('https://www.googleapis.com/auth/'+scope));
+  assert.equal(manifest.runtimeVersion,'V8');
+});
+function developmentHarness(settings: Record<string,string | undefined> = {}) {
+  const row = ['demo-id','Demo','https://example.test/demo','true','test-agent',
+    'test@example.test','test-calendar','',''];
+  const context: Record<string, any> = {
+    PropertiesService: {getScriptProperties:()=>({getProperty:(k:string)=>settings[k] ?? null})},
+    SpreadsheetApp: {openById:()=>{throw Error('Unexpected real spreadsheet access');}},
+    UrlFetchApp: {fetch:()=>{throw Error('Unexpected external request');}},
+    MailApp: {sendEmail:()=>{throw Error('Unexpected real email');}},
+    Session: {getActiveUser:()=>({getEmail:()=> 'operator@example.test'}),
+      getEffectiveUser:()=>({getEmail:()=> 'operator@example.test'})},
+    LockService: {getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},
+  };
+  runInNewContext(completeSource,context);
+  context.sheet=()=>({getLastRow:()=>2,getRange:()=>({getDisplayValues:()=>[row]})});
+  return context;
+}
+const developmentSettings = {DWELLHUNT_ENVIRONMENT:'development',DEV_DISABLE_TELEGRAM:'true',
+  DEV_TEST_EMAIL:'test@example.test',DEV_TEST_CALENDAR_ID:'test-calendar',
+  DEV_OPERATOR_EMAIL:'operator@example.test',DEV_BOOKING_ID:'existing-test'};
+
+test('complete Apps Script retains Telegram requirements unless both Development flags are explicit', () => {
+  for (const settings of [{}, {DEV_DISABLE_TELEGRAM:'true'},
+    {DWELLHUNT_ENVIRONMENT:'production',DEV_DISABLE_TELEGRAM:'true'}]) {
+    assert.throws(()=>developmentHarness(settings).property('demo-id'), /PROPERTY_CONFIG/);
+  }
+  assert.equal(developmentHarness(developmentSettings).property('demo-id').calendar_id,'test-calendar');
+});
+test('Development routing rejects unrelated buyer, agent, calendar and operator', () => {
+  const c=developmentHarness(developmentSettings);
+  assert.doesNotThrow(()=>c.dhAssertDevelopmentRouting_('test@example.test','test@example.test','test-calendar'));
+  for (const args of [['other@example.test','test@example.test','test-calendar'],
+    ['test@example.test','other@example.test','test-calendar'],
+    ['test@example.test','test@example.test','other-calendar']])
+    assert.throws(()=>c.dhAssertDevelopmentRouting_(...args), /DEV_TEST_ROUTING_REQUIRED/);
+  c.Session.getActiveUser=()=>({getEmail:()=> 'other@example.test'});
+  assert.throws(()=>c.developmentApproveTestBooking(), /UNAUTHORIZED_DEV_OPERATOR/);
+});
+test('manual Development approval and processing operate on one authorized existing record', () => {
+  const c=developmentHarness(developmentSettings);
+  const b={booking_id:'existing-test',property_id:'demo-id',email:'test@example.test',
+    agent_email:'test@example.test',_calendar:'test-calendar',booking_status:'pending_approval',
+    _approvalExpires:new Date(Date.now()+3600000).toISOString(),_jobs:['received','agent_pending'],_sent:{}};
+  c.all=()=>[b]; c.save=()=>{};
+  assert.equal(c.developmentApproveTestBooking().status,'approved');
+  assert.throws(()=>c.developmentApproveTestBooking(), /INVALID_APPROVAL_STATE/);
+  let calendarCalls=0,delivered=0;
+  c.tick=()=>{throw Error('Must not process all bookings');};
+  c.reconcileCalendar=(booking:typeof b)=>{assert.equal(booking.booking_id,'existing-test');calendarCalls++;};
+  c.deliver=()=>{delivered++;};
+  assert.equal(c.developmentProcessTestBooking().booking_id,'existing-test');
+  assert.equal(calendarCalls,1); assert.equal(delivered,2);
+});
+test('Development Telegram skip does not send external requests or disable email delivery', () => {
+  const c=developmentHarness(developmentSettings);
+  const b={booking_id:'existing-test',booking_status:'pending_approval',email:'test@example.test',
+    agent_email:'test@example.test',_calendar:'test-calendar',_sent:{} as Record<string,string>,_jobs:['agent_pending']};
+  c.save=()=>{}; c.log=()=>{};
+  c.deliver(b,'agent_pending');
+  assert.equal(b._sent.agent_pending,'disabled-development');
+  assert.equal(b._jobs.length,0);
+  c.emailTemplate=()=>({subject:'mock',text:'mock',html:'mock'});
+  let emails=0; c.MailApp.sendEmail=()=>{emails++;};
+  c.deliver(b,'received'); assert.equal(emails,1);
+});
+
+test('Calendar creation deduplicates the shared buyer/agent test mailbox and reaches confirmed', () => {
+  const c=developmentHarness(developmentSettings);
+  const start=new Date(Date.now()+86400000).toISOString();
+  const b={booking_id:'existing-test',email:'test@example.test',agent_email:'test@example.test',
+    _calendar:'test-calendar',property_title:'Demo',property_url:'https://example.test/demo',
+    viewing_datetime_utc:start,booking_status:'approved',_invited:true,_sent:{},_jobs:[]};
+  c.getEvent=()=>({httpCode:404}); c.available=()=>true; c.save=()=>{};
+  c.google=(_method:string,_path:string,body:any)=>{
+    assert.equal(body.attendees.length,1);
+    assert.equal(body.attendees[0].email,'test@example.test');
+    return {id:b.booking_id,extendedProperties:body.extendedProperties,start:body.start,end:body.end,
+      conferenceData:{createRequest:{status:{statusCode:'success'}},entryPoints:[{entryPointType:'video',uri:'https://meet.google.com/mock-test-only'}]}};
+  };
+  c.reconcileCalendar(b,[b]);
+  assert.equal(b.booking_status,'confirmed');
+});
+
+test('automatic Development delivery still rejects unrelated contacts when Telegram is enabled', () => {
+  const c=developmentHarness({...developmentSettings,DEV_DISABLE_TELEGRAM:'false',DEV_TEST_TELEGRAM_ID:'123456'});
+  let writes=0;c.save=()=>{writes++;};
+  assert.throws(()=>c.deliver({email:'other@example.test',agent_email:'test@example.test',_calendar:'test-calendar'},'received'),/DEV_TEST_ROUTING_REQUIRED/);
+  c.all=()=>[{email:'other@example.test',agent_email:'test@example.test',_calendar:'test-calendar'}];
+  assert.throws(()=>c.dhWorkflowBookings_(),/DEV_TEST_ROUTING_REQUIRED/);
+  assert.throws(()=>c.tg('sendMessage',{chat_id:'unrelated',text:'must not send'}),/DEV_TEST_ROUTING_REQUIRED/);
+  assert.equal(writes,0);
+});
+
+test('Telegram activation fails before registry writes unless webhook readiness passes', () => {
+  const c=developmentHarness(developmentSettings);
+  c.developmentAutomationReadiness=()=>({bot_matches:true,private_test_chat:true,webhook_matches:false,ops_chat_matches:true});
+  assert.throws(()=>c.developmentEnableTelegramRouting(),/DEV_AUTOMATION_NOT_READY/);
+});
+
+test('Telegram approval validates private chat, allowed user and nonce and does not approve twice', () => {
+  const c=developmentHarness({...developmentSettings,DEV_DISABLE_TELEGRAM:'false'});
+  const b={booking_id:'existing-test',_chat:'123456',_users:['123456'],_nonce:'mock-nonce',
+    booking_status:'pending_approval',_approvalExpires:new Date(Date.now()+3600000).toISOString()};
+  c.all=()=>[b];c.ack=()=>{};let saves=0;c.save=()=>{saves++;};
+  const update=(user:string,chat:string,nonce:string)=>({callback_query:{data:'a|existing-test|'+nonce,message:{chat:{id:chat}},from:{id:user}}});
+  for(const args of [['other','123456','mock-nonce'],['123456','other','mock-nonce'],['123456','123456','wrong']])
+    assert.throws(()=>c.agentAction(update(...args as [string,string,string])),/UNAUTHORIZED_AGENT/);
+  assert.equal(saves,0);
+  assert.equal(c.agentAction(update('123456','123456','mock-nonce')).status,'approved');
+  assert.equal(c.agentAction(update('123456','123456','mock-nonce')).ignored,true);
+  assert.equal(saves,1);
+});
+
+test('an agent cannot mark a future viewing completed', () => {
+  const c=developmentHarness(developmentSettings);
+  c.all=()=>[{booking_id:'existing-test',_chat:'123456',_users:['123456'],_nonce:'mock-nonce',booking_status:'confirmed',viewing_datetime_utc:new Date(Date.now()+3600000).toISOString()}];
+  c.save=()=>{throw Error('Must not save a false completion');};
+  assert.throws(()=>c.agentAction({callback_query:{data:'c|existing-test|mock-nonce',message:{chat:{id:'123456'}},from:{id:'123456'}}}),/INVALID_COMPLETION_STATE/);
+});
+
+
+test('GitHub CAPTCHA hostname exception is Development-only and retains action and success checks', () => {
+  let verified={success:true,hostname:'mfds824.github.io',action:'booking'};
+  const make=(settings:Record<string,string>)=>{
+    const c=developmentHarness({...settings,ALLOWED_HOSTNAME:'development.dwellhunt-viewing-dev.pages.dev',TURNSTILE_SECRET:'mock-secret',DEV_TEST_WEBSITE_HOSTNAME:'mfds824.github.io'});
+    c.UrlFetchApp={fetch:()=>({getContentText:()=>JSON.stringify(verified)})};return c;
+  };
+  const c=make({DWELLHUNT_ENVIRONMENT:'development'});
+  assert.doesNotThrow(()=>c.verifyHuman({turnstile_token:'mock-token'},'booking'));
+  verified={...verified,hostname:'attacker.example'};assert.throws(()=>c.verifyHuman({turnstile_token:'mock-token'},'booking'),/HUMAN_VERIFICATION_FAILED/);
+  verified={success:true,hostname:'mfds824.github.io',action:'manage'};assert.throws(()=>c.verifyHuman({turnstile_token:'mock-token'},'booking'),/HUMAN_VERIFICATION_FAILED/);
+  verified={success:false,hostname:'mfds824.github.io',action:'booking'};assert.throws(()=>c.verifyHuman({turnstile_token:'mock-token'},'booking'),/HUMAN_VERIFICATION_FAILED/);
+  verified={...verified,success:true};assert.throws(()=>make({DWELLHUNT_ENVIRONMENT:'production'}).verifyHuman({turnstile_token:'mock-token'},'booking'),/HUMAN_VERIFICATION_FAILED/);
+});
+
+
+test('Live context isolates storage, permits customers and pins approved agent/calendar',()=>{
+  const c=developmentHarness({...developmentSettings,LIVE_SPREADSHEET_ID:'live-sheet',SPREADSHEET_ID:'test-sheet',LIVE_AGENT_EMAIL:'agent@example.test',LIVE_CALENDAR_ID:'live-calendar',LIVE_PROPERTY_IDS:'live-property'});
+  assert.equal(c.cfg('SPREADSHEET_ID'),'test-sheet');c.DH_VIEWING_CONTEXT_='production';
+  assert.equal(c.cfg('SPREADSHEET_ID'),'live-sheet');assert.equal(c.dhIsDevelopment_(),false);
+  assert.doesNotThrow(()=>c.dhAssertLiveRouting_('customer@example.test','agent@example.test','live-calendar'));
+  assert.throws(()=>c.dhAssertLiveRouting_('customer@example.test','fiction@example.test','live-calendar'),/PRODUCTION_ROUTING_REQUIRED/);
+  assert.throws(()=>c.dhAssertLiveRouting_('customer@example.test','agent@example.test','test-calendar'),/PRODUCTION_ROUTING_REQUIRED/);
+  assert.throws(()=>c.property('other-property'),/PROPERTY_UNAVAILABLE/);
+  c.DH_VIEWING_CONTEXT_='';assert.equal(c.cfg('SPREADSHEET_ID'),'test-sheet');assert.equal(c.dhIsDevelopment_(),true);
+});
+test('Gateway validates authentication before accepting Production context and restores context',()=>{
+  const c=developmentHarness({...developmentSettings,GATEWAY_SECRET:'mock-key'});c.output=(v:unknown)=>v;
+  const r=c.dhHandlePost_({postData:{contents:JSON.stringify({gatewaySecret:'wrong',environment:'production',action:'intake',payload:{}})}});
+  assert.equal(r.code,'UNAUTHORIZED');assert.equal(c.DH_VIEWING_CONTEXT_,'');
+  c.intake=()=>({mode:c.cfg('DWELLHUNT_ENVIRONMENT')});
+  const good=c.dhHandlePost_({postData:{contents:JSON.stringify({gatewaySecret:'mock-key',environment:'production',action:'intake',payload:{environment:'development'}})}});
+  assert.equal(good.mode,'production');assert.equal(c.DH_VIEWING_CONTEXT_,'');
+});
+
+const leadsSource = readFileSync(new URL('../apps-script/Leads.gs', import.meta.url), 'utf8');
+function leadHarness(settings: Record<string,string|undefined> = {}) {
+  const store: Record<string, string | undefined> = { ...developmentSettings, DEV_DISABLE_TELEGRAM: 'false', DEV_TEST_TELEGRAM_ID: '222',
+    LIVE_TELEGRAM_ID: '111', LIVE_SPREADSHEET_ID: 'live-sheet', SPREADSHEET_ID: 'test-sheet', ...settings };
+  const c = developmentHarness(store);
+  runInNewContext(leadsSource, c);
+  c.PropertiesService = { getScriptProperties: () => ({ getProperty: (k: string) => store[k] ?? null, setProperty: (k: string, v: string) => { store[k] = v; } }) };
+  const rows: unknown[][] = [];
+  const sent: { telegram: any[]; calls: [string, any][]; email: any[]; logs: string[]; sheets: string[] } =
+    { telegram: [], calls: [], email: [], logs: [], sheets: [] };
+  let n = 0;
+  const clock = { hour: 12, weekday: 3, week: '2026-W47', today: '' };
+  c.Utilities = { getUuid: () => `0000-0000-0000-${String(++n).padStart(4, '0')}`,
+    formatDate: (d: Date, _tz: string, fmt: string) => fmt === 'H' ? String(clock.hour) : fmt === 'u' ? String(clock.weekday)
+      : fmt === "YYYY-'W'ww" ? clock.week : fmt === 'yyyy-MM-dd' ? (clock.today || d.toISOString().slice(0, 10)) : 'Fri, 20 Nov 2026' };
+  c.SpreadsheetApp = { openById: () => ({ getSheetByName: () => null }) };
+  c.all = () => [];
+  c.sheet = (name: string, cols: string[]) => { sent.sheets.push(name + '@' + c.cfg('SPREADSHEET_ID')); return {
+    getLastRow: () => rows.length + 1,
+    getRange: (row: number, col: number, numRows?: number, numCols?: number) => ({
+      getDisplayValues: () => rows.slice(row - 2, row - 2 + (numRows || 1)).map(r => r.slice(col - 1, col - 1 + (numCols || cols.length)).map(String)),
+      setValue: (v: unknown) => { rows[row - 2][col - 1] = v; },
+    }),
+    appendRow: (r: unknown[]) => { rows.push([...r]); },
+  }; };
+  c.tg = (method: string, data: any) => { sent.calls.push([method, data]); if (method === 'sendMessage') sent.telegram.push(data); return {}; };
+  c.MailApp = { sendEmail: (m: any) => { sent.email.push(m); } };
+  c.log = (_id: string, code: string) => sent.logs.push(code);
+  const rowOf = (i = rows.length - 1) => Object.fromEntries((c.DH_LEAD_COLUMNS as string[]).map((k, j) => [k, rows[i][j]]));
+  return { c, rows, sent, rowOf, store, clock };
+}
+const inDays = (d: number) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 10);
+const goodLead = { customer_name: 'Test Buyer', email: 'Buyer@Example.test', phone: '+94 77 000 0000', enquiry_type: 'schedule_tour',
+  property: 'Demo Villa', property_id: 'prop-demo', location: 'Colombo 07', budget: '425000000',
+  message: 'Is the price negotiable? I can view it on Friday.', preferred_date: inDays(3), consent: true };
+const templateLead = { ...goodLead, enquiry_type: 'general', phone: '', preferred_date: '',
+  message: 'Hello, I am interested in "Demo Villa". Please send more details regarding title deeds and schedule a viewing.' };
+
+test('HOT lead is stored, scored from buyer actions and sent once as a tidy alert with buttons', () => {
+  const { c, rows, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  const r = c.dhLead_({ ...goodLead });
+  assert.equal(r.status, 'received'); assert.equal(r.duplicate, false);
+  assert.deepEqual(sent.sheets, ['DwellHunt_Leads@live-sheet']);
+  const row = rowOf();
+  assert.equal(row['Email'], 'buyer@example.test'); assert.equal(Number(row['Ai lead score']), 65); assert.equal(row['Ai lead priority'], 'HOT');
+  assert.match(String(row['Ai lead reason']), /Schedule Tour \(\+20\).*own message \(\+20\).*3 day\(s\) \(\+15\).*phone\/WhatsApp number \(\+10\)/);
+  assert.equal(row['Score Version'], 'v2'); assert.equal(row['Lead Status'], 'new'); assert.equal(String(row['Alert Key']).length, 12);
+  assert.equal(sent.telegram.length, 1);
+  const alert = sent.telegram[0];
+  assert.equal(alert.chat_id, '111'); assert.equal(alert.parse_mode, 'HTML');
+  assert.match(alert.text, /^🔥 <b>HOT LEAD<\/b> · Reply within 1 hour\n\n🏠 <b>Demo Villa<\/b>\n📅 Wants a viewing: Fri, 20 Nov 2026/);
+  assert.match(alert.text, /📱 \+94 77 000 0000 · <a href="https:\/\/wa\.me\/94770000000">WhatsApp ↗<\/a>/);
+  assert.match(alert.text, /💬 "Is the price negotiable\? I can view it on Friday\."/);
+  assert.match(alert.text, /✅ Viewing request · Wrote own message · Viewing in 3 days · Gave phone\n👉 Call or WhatsApp today/);
+  assert.doesNotMatch(alert.text, /score|\+20|Ai /i);
+  assert.equal(JSON.stringify(alert.reply_markup.inline_keyboard[0].map((b: any) => b.text)), JSON.stringify(['✅ Contacted', '❌ Not interested']));
+  assert.equal(sent.email.length, 1); assert.equal(sent.email[0].to, 'buyer@example.test');
+  const again = c.dhLead_({ ...goodLead });
+  assert.equal(again.duplicate, true); assert.equal(rows.length, 1); assert.equal(sent.telegram.length, 1); assert.equal(sent.email.length, 1);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Alert text escapes customer HTML, shortens long messages and shows template and returning-customer lines', () => {
+  const { c, sent } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.all = () => [{ email: 'buyer@example.test' }];
+  c.dhLead_({ ...goodLead, customer_name: '<b>Eve</b>', message: 'x'.repeat(400) + ' <script>' });
+  const text = sent.telegram[0].text;
+  assert.match(text, /👤 &lt;b&gt;Eve&lt;\/b&gt;/); assert.doesNotMatch(text, /<script>/);
+  assert.match(text, /💬 "x{297}…"/);
+  assert.match(text, /🔁 Returning customer · has a virtual viewing booked/);
+  const warm = c.dhLeadAlertText_({ name: 'A', phone: '', email: 'a@example.test', enquiryType: 'general', property: 'Demo', preferredDate: '', message: '' },
+    { priority: 'WARM', labels: [], next: 'Reply with the details they asked for.' }, { template: true, hasBooking: false, earlierEnquiry: true });
+  assert.match(warm, /^🟡 <b>WARM LEAD<\/b> · Reply today/);
+  assert.match(warm, /💬 <i>Sent the standard message only<\/i>/); assert.match(warm, /🔁 Returning customer · enquired before/);
+  assert.doesNotMatch(warm, /📅|📱|✅/);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Template-only enquiries score nothing and COLD leads wait for the evening digest', () => {
+  const { c, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...templateLead });
+  assert.equal(Number(rowOf()['Ai lead score']), 0); assert.equal(rowOf()['Ai lead priority'], 'COLD');
+  assert.equal(rowOf()['Telegram Sent'], 'digest pending'); assert.equal(sent.telegram.length, 0); assert.equal(sent.email.length, 1);
+  assert.equal(c.dhLeadIsTemplate_('Hello, I’m interested in “Demo Villa”. Please send me more details.', 'Demo Villa'), true);
+  assert.equal(c.dhLeadIsTemplate_('Hello, I\'d like to arrange a viewing of "Demo Villa".', 'Demo Villa'), true);
+  assert.equal(c.dhLeadIsTemplate_('', 'Demo Villa'), true);
+  assert.equal(c.dhLeadIsTemplate_('Hello, I am interested in "Demo Villa". Is parking included?', 'Demo Villa'), false);
+  c.dhLead_({ ...templateLead, property_id: 'p2', phone: '+94771111111', message: 'Is the price negotiable?' });
+  assert.equal(Number(rowOf()['Ai lead score']), 40); assert.equal(rowOf()['Ai lead priority'], 'WARM');
+  assert.match(String(rowOf()['Ai lead reason']), /Enquired before \(\+10\)/);
+  assert.equal(sent.telegram.length, 1); assert.match(sent.telegram[0].text, /🟡 <b>WARM LEAD<\/b>/);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Low-urgency wording lowers the score; an existing viewing booking raises it; far dates count less', () => {
+  const { c, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...templateLead, email: 'a@example.test', message: 'Just browsing for now, maybe next year.' });
+  assert.equal(Number(rowOf()['Ai lead score']), 0); assert.match(String(rowOf()['Ai lead reason']), /low urgency \(-20\)/);
+  c.all = () => [{ email: 'b@example.test', booking_status: 'confirmed' }];
+  c.dhLead_({ ...templateLead, email: 'B@example.test' });
+  assert.equal(Number(rowOf()['Ai lead score']), 25); assert.match(String(rowOf()['Ai lead reason']), /Already booked a virtual viewing \(\+25\)/);
+  c.dhLead_({ ...goodLead, email: 'c@example.test', preferred_date: inDays(45) });
+  assert.equal(Number(rowOf()['Ai lead score']), 53); assert.equal(rowOf()['Ai lead priority'], 'WARM');
+  c.all = () => { throw new Error('state unavailable'); };
+  assert.equal(c.dhLead_({ ...goodLead, email: 'd@example.test' }).status, 'received');
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Contacted / Not interested buttons update Lead Status only for the right chat, person and key', () => {
+  const { c, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...goodLead });
+  const [contacted, notInterested] = sent.telegram[0].reply_markup.inline_keyboard[0].map((b: any) => b.callback_data);
+  const press = (data: string, chat = 111, from = 111) => c.agentAction({ callback_query: { id: 'cb', data,
+    message: { chat: { id: chat }, message_id: 9 }, from: { id: from } } });
+  assert.throws(() => press(contacted, 111, 999), /UNAUTHORIZED_AGENT/);
+  assert.throws(() => press(contacted, 555, 555), /UNAUTHORIZED_AGENT/);
+  assert.throws(() => press(contacted.replace(/\|[^|]+\|c$/, '|wrongkey000|c')), /UNAUTHORIZED_AGENT/);
+  assert.equal(rowOf()['Lead Status'], 'new');
+  assert.equal(press(contacted).status, 'lead_contacted');
+  assert.equal(rowOf()['Lead Status'], 'contacted'); assert.notEqual(rowOf()['Status Updated At'], '');
+  const edit = sent.calls.find(([m]) => m === 'editMessageReplyMarkup')![1];
+  assert.equal(edit.message_id, 9); assert.equal(edit.reply_markup.inline_keyboard[0][0].text, '✅ Marked as contacted');
+  assert.equal(press(contacted).ignored, true);
+  assert.equal(press(notInterested).status, 'lead_not_interested'); assert.equal(rowOf()['Lead Status'], 'not interested');
+  assert.ok(sent.calls.some(([m, d]) => m === 'answerCallbackQuery' && /Saved: not interested/.test(d.text)));
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Evening digest sends one summary of COLD leads after 18:00, once per day', () => {
+  const { c, sent, rows, store, clock } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...templateLead, customer_name: 'Ann', phone: '+94771234567' });
+  c.dhLead_({ ...templateLead, customer_name: 'Ben', email: 'ben@example.test', property_id: 'p9', property: 'Sea View Flat' });
+  assert.equal(sent.telegram.length, 0);
+  clock.hour = 17;
+  assert.equal(c.dhLeadDigest_().skipped, true); assert.equal(sent.telegram.length, 0);
+  clock.hour = 18;
+  const r = c.dhLeadDigest_();
+  assert.equal(r.processed, 2); assert.equal(r.errors, 0); assert.equal(sent.telegram.length, 1);
+  const text = sent.telegram[0].text;
+  assert.match(text, /^🔵 <b>Cold leads today<\/b> · 2 new/);
+  assert.match(text, /• <b>Ann<\/b> — Demo Villa\n   📱 \+94771234567 · <a href="https:\/\/wa\.me\/94771234567">WhatsApp ↗<\/a>/);
+  assert.match(text, /• <b>Ben<\/b> — Sea View Flat\n   ✉️ ben@example\.test/);
+  assert.ok(rows.every(r => String(r[(c.DH_LEAD_COLUMNS as string[]).indexOf('Telegram Sent')]).startsWith('in digest ')));
+  assert.ok(store['LIVE_LEAD_DIGEST_DATE']);
+  assert.equal(c.dhLeadDigest_().skipped, true); assert.equal(sent.telegram.length, 1);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('A failed digest is retried later and an empty digest sends nothing', () => {
+  const { c, sent, store, clock } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  clock.hour = 19;
+  assert.equal(c.dhLeadDigest_().processed, 0); assert.equal(sent.telegram.length, 0);
+  delete store['LIVE_LEAD_DIGEST_DATE'];
+  c.dhLead_({ ...templateLead });
+  c.tg = () => { throw new Error('telegram down'); };
+  assert.equal(c.dhLeadDigest_().errors, 1); assert.equal(store['LIVE_LEAD_DIGEST_DATE'], undefined);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Links or disposable emails are stored as SPAM without alerts or emails', () => {
+  const { c, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...goodLead, message: 'Cheap loans at https://spam.example.test' });
+  assert.equal(rowOf()['Ai lead priority'], 'SPAM'); assert.equal(rowOf()['Lead Status'], 'spam'); assert.equal(rowOf()['Alert Key'], '');
+  c.dhLead_({ ...goodLead, email: 'x@mailinator.com', property_id: 'p3' });
+  assert.equal(rowOf()['Ai lead priority'], 'SPAM');
+  assert.equal(sent.telegram.length, 0); assert.equal(sent.email.length, 0);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Lead requires consent and a valid contact, neutralises spreadsheet formulas and survives alert failures', () => {
+  const { c, rows, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  assert.throws(() => c.dhLead_({ ...goodLead, consent: false }), /INVALID_REQUEST/);
+  assert.throws(() => c.dhLead_({ ...goodLead, email: '', phone: '' }), /INVALID_REQUEST/);
+  assert.throws(() => c.dhLead_({ ...goodLead, email: 'not-an-email' }), /INVALID_REQUEST/);
+  assert.equal(rows.length, 0);
+  c.tg = () => { throw new Error('telegram down'); };
+  c.MailApp = { sendEmail: () => { throw new Error('quota'); } };
+  assert.equal(c.dhLead_({ ...goodLead, customer_name: '=HYPERLINK("x")' }).status, 'received');
+  assert.equal(String(rowOf()['Customer Name']).startsWith("'="), true);
+  assert.equal(rowOf()['Telegram Sent'], 'failed'); assert.equal(rowOf()['Confirmation Email Sent'], 'failed');
+  assert.ok(sent.logs.includes('LEAD_TELEGRAM_FAILED') && sent.logs.includes('LEAD_EMAIL_FAILED'));
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('An existing leads tab from an earlier version gains the newer header columns', () => {
+  const { c } = leadHarness();
+  const all = c.DH_LEAD_COLUMNS as string[];
+  for (const width of [22, 23]) {
+    const writes: unknown[] = [];
+    c.SpreadsheetApp = { openById: () => ({ getSheetByName: () => ({ getLastColumn: () => width,
+      getRange: (r: number, col: number, nr: number, nc: number) => ({ getDisplayValues: () => [all.slice(0, width)],
+        setValues: (v: unknown) => writes.push([r, col, nr, nc, v]) }) }) }) };
+    c.dhLeadSheet_();
+    assert.equal(JSON.stringify(writes), JSON.stringify([[1, width + 1, 1, all.length - width, [all.slice(width)]]]));
+  }
+});
+
+test('Development lead uses the test sheet and chat and never emails an unrelated address', () => {
+  const { c, sent } = leadHarness();
+  assert.equal(c.dhLead_({ ...goodLead, email: 'stranger@example.test' }).status, 'received');
+  assert.deepEqual(sent.sheets, ['DwellHunt_Leads@test-sheet']);
+  assert.equal(sent.telegram[0].chat_id, '222');
+  assert.equal(sent.email.length, 0); assert.ok(sent.logs.includes('DEV_LEAD_EMAIL_SKIPPED'));
+  c.dhLead_({ ...goodLead, email: 'test@example.test', property_id: 'other' });
+  assert.equal(sent.email.length, 1);
+});
+
+test('Gateway accepts the lead and lead_digest actions in Production context', () => {
+  const c = developmentHarness({ ...developmentSettings, GATEWAY_SECRET: 'mock-key' });
+  runInNewContext(leadsSource, c);
+  c.dhLead_ = () => ({ httpStatus: 200, status: 'received', context: c.DH_VIEWING_CONTEXT_ });
+  c.dhLeadMaintenance_ = () => ({ processed: 0, errors: 0, context: c.DH_VIEWING_CONTEXT_ });
+  for (const action of ['lead', 'lead_digest']) {
+    const r = c.dhHandlePost_({ postData: { contents: JSON.stringify({ gatewaySecret: 'mock-key', environment: 'production', action, payload: {} }) } });
+    assert.equal(r.ok, true); assert.equal(r.context, 'production'); assert.equal(c.DH_VIEWING_CONTEXT_, '');
+  }
+});
+
+test('Phone numbers typed differently are recognised as the same person', () => {
+  const { c } = leadHarness();
+  for (const p of ['077 000 0000', '+94 77 000 0000', '0094770000000', '94770000000', '(+94) 77-000-0000'])
+    assert.equal(c.dhLeadPhoneKey_(p), '94770000000');
+  assert.equal(c.dhLeadPhoneKey_('12345'), '');
+  assert.equal(c.dhLeadPhoneKey_('+44 7700 900123'), '447700900123');
+});
+
+test('An exact repeat is dropped, but a new message about the same property becomes a follow-up', () => {
+  const { c, rows, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...goodLead });
+  assert.equal(c.dhLead_({ ...goodLead, message: '  is the PRICE negotiable?? I can view it on Friday ' }).duplicate, true);
+  assert.equal(rows.length, 1);
+  const r = c.dhLead_({ ...goodLead, message: 'Also, is parking included?' });
+  assert.equal(r.duplicate, false); assert.equal(rows.length, 2);
+  assert.equal(rowOf()['Lead Status'], 'follow-up'); assert.equal(rowOf()['Confirmation Email Sent'], 'not sent (follow-up)');
+  assert.equal(sent.email.length, 1);
+  assert.equal(sent.telegram.length, 2);
+  const note = sent.telegram[1].text;
+  assert.match(note, /^💬 <b>Follow-up from Test Buyer<\/b> · 🔥 HOT\n🏠 Demo Villa\n📱 \+94 77 000 0000 · <a href="https:\/\/wa\.me\/94770000000">WhatsApp ↗<\/a>/);
+  assert.match(note, /💬 "Also, is parking included\?"/);
+  assert.equal(sent.telegram[1].reply_markup.inline_keyboard[0].length, 2);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('The same person is matched by email or phone, and template-only repeats stay duplicates', () => {
+  const { c, rows, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...templateLead, email: '', phone: '077 123 4567' });
+  assert.equal(rowOf()['Telegram Sent'], 'digest pending');
+  assert.equal(c.dhLead_({ ...templateLead, email: 'new@example.test', phone: '+94 77 123 4567',
+    message: 'Hello, I\'m interested in "Demo Villa". Please send me more details.' }).duplicate, true);
+  assert.equal(rows.length, 1);
+  c.dhLead_({ ...templateLead, email: 'new@example.test', phone: '+94771234567', message: 'Can I see it this weekend?' });
+  assert.equal(rowOf()['Lead Status'], 'follow-up'); assert.notEqual(rowOf()['Telegram Sent'], 'digest pending');
+  assert.equal(sent.telegram.length, 1); assert.match(sent.telegram[0].text, /^💬 <b>Follow-up from Test Buyer<\/b>/);
+  c.dhLead_({ ...templateLead, email: 'other@example.test', phone: '0771234567', property_id: 'p5', property: 'Other Flat' });
+  assert.equal(rowOf()['Lead Status'], 'new'); assert.match(String(rowOf()['Ai lead reason']), /Enquired before/);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Phones are stored as text, and rows whose leading 0 Sheets already dropped still match', () => {
+  const { c, rows, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  assert.equal(c.dhLeadPhoneKey_('770153678'), '94770153678');
+  c.dhLead_({ ...templateLead, email: 'first@example.test', phone: '0770153678' });
+  assert.equal(rows[0][(c.DH_LEAD_COLUMNS as string[]).indexOf('Phone')], "'0770153678");
+  rows[0][(c.DH_LEAD_COLUMNS as string[]).indexOf('Phone')] = 770153678;
+  assert.equal(c.dhLead_({ ...templateLead, email: 'second@example.test', phone: '0770153678' }).duplicate, true);
+  c.dhLead_({ ...templateLead, email: 'second@example.test', phone: '0770153678', property_id: 'p7', property: 'Other' });
+  assert.match(String(rowOf()['Ai lead reason']), /Enquired before/);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Outcome buttons record viewing done and deal, and show only the next sensible steps', () => {
+  const { c, sent, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  c.dhLead_({ ...goodLead });
+  const keyboard = sent.telegram[0].reply_markup.inline_keyboard;
+  assert.equal(JSON.stringify(keyboard.map((r: any[]) => r.map(b => b.text))),
+    JSON.stringify([['✅ Contacted', '❌ Not interested'], ['🏠 Viewing done', '🤝 Deal / offer']]));
+  const data = (op: string) => keyboard.flat().find((b: any) => b.callback_data.endsWith('|' + op)).callback_data;
+  const press = (op: string) => c.agentAction({ callback_query: { id: 'cb', data: data(op), message: { chat: { id: 111 }, message_id: 9 }, from: { id: 111 } } });
+  assert.equal(press('c').status, 'lead_contacted');
+  const firstPress = rowOf()['Status Updated At'];
+  assert.equal(rowOf()['Outcome'], '');
+  assert.equal(press('v').status, 'lead_viewing_done');
+  assert.equal(rowOf()['Lead Status'], 'viewing done'); assert.equal(rowOf()['Outcome'], 'viewing done'); assert.notEqual(rowOf()['Outcome At'], '');
+  assert.equal(rowOf()['Status Updated At'], firstPress);
+  let edit = sent.calls.filter(([m]) => m === 'editMessageReplyMarkup').at(-1)![1];
+  assert.equal(JSON.stringify(edit.reply_markup.inline_keyboard.map((r: any[]) => r.map(b => b.text))),
+    JSON.stringify([['🏠 Marked: viewing done'], ['🤝 Deal / offer', '❌ Not interested']]));
+  assert.equal(press('d').status, 'lead_deal'); assert.equal(rowOf()['Outcome'], 'deal');
+  edit = sent.calls.filter(([m]) => m === 'editMessageReplyMarkup').at(-1)![1];
+  assert.equal(JSON.stringify(edit.reply_markup.inline_keyboard.map((r: any[]) => r.map(b => b.text))), JSON.stringify([['🤝 Marked: deal / offer']]));
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Daily outcome check links later viewing bookings and marks untouched old leads as no response', () => {
+  const { c, rows, rowOf } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  const cols = c.DH_LEAD_COLUMNS as string[];
+  c.dhLead_({ ...templateLead, email: 'booker@example.test', phone: '0771112223' });
+  c.dhLead_({ ...templateLead, email: 'quiet@example.test', phone: '', property_id: 'p2' });
+  c.dhLead_({ ...templateLead, email: 'agent-set@example.test', phone: '', property_id: 'p3' });
+  rows[1][cols.indexOf('Date')] = new Date(Date.now() - 20 * 86400000).toISOString();
+  rows[2][cols.indexOf('Date')] = new Date(Date.now() - 20 * 86400000).toISOString();
+  rows[2][cols.indexOf('Outcome')] = 'not interested';
+  c.all = () => [{ email: 'someone-else@example.test', whatsapp: '+94771112223', booking_status: 'pending_approval', created_at: new Date().toISOString() }];
+  assert.equal(c.dhLeadOutcomes_(), 2);
+  assert.equal(rowOf(0)['Outcome'], 'viewing booked');
+  assert.equal(rowOf(1)['Outcome'], 'no response');
+  assert.equal(rowOf(2)['Outcome'], 'not interested');
+  c.all = () => [{ email: 'booker@example.test', whatsapp: '', booking_status: 'completed', created_at: new Date().toISOString() }];
+  assert.equal(c.dhLeadOutcomes_(), 1); assert.equal(rowOf(0)['Outcome'], 'viewing done');
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+test('Weekly report shows counts, outcome shares per signal and an early-data warning', () => {
+  const { c } = leadHarness();
+  const cols = c.DH_LEAD_COLUMNS as string[];
+  const make = (o: Record<string, string>) => cols.map(k => o[k] ?? '');
+  const recent = new Date(Date.now() - 86400000).toISOString();
+  const rows = [
+    make({ Date: recent, 'Lead Status': 'deal', 'Ai lead priority': 'HOT', 'Ai lead reason': 'Chose Schedule Tour (+20); Wrote their own message (+20)', Outcome: 'deal', Phone: '0771234567', Budget: '425000000' }),
+    make({ Date: recent, 'Lead Status': 'new', 'Ai lead priority': 'COLD', 'Ai lead reason': 'Default message only, no extra signals', Outcome: 'no response', Budget: '30000000' }),
+    make({ Date: recent, 'Lead Status': 'contacted', 'Ai lead priority': 'WARM', 'Ai lead reason': 'Chose Schedule Tour (+20)', Outcome: 'viewing booked', Phone: '+447700900123' }),
+    make({ Date: recent, 'Lead Status': 'new', 'Ai lead priority': 'WARM', 'Ai lead reason': 'Wrote their own message (+20)' }),
+    make({ Date: recent, 'Lead Status': 'spam', 'Ai lead priority': 'SPAM' }),
+  ];
+  const text = c.dhLeadReportText_(rows);
+  assert.match(text, /^📊 <b>Weekly lead report<\/b>/);
+  assert.match(text, /This week: 4 leads \(🔥 1 · 🟡 2 · 🔵 1\) · 🚫 1 spam/);
+  assert.match(text, /All time: 🏠 1 viewings · 🤝 1 deals · ❌ 0 not interested · 💤 1 no response · ⏳ 1 open/);
+  assert.match(text, /• Schedule Tour: 100% \(2 of 2\)/);
+  assert.match(text, /• Standard message only: 50% \(1 of 2\)/);
+  assert.match(text, /• Overseas number: 100% \(1 of 1\)/);
+  assert.match(text, /• Price under 50M: 0% \(0 of 1\)/);
+  assert.match(text, /⚠️ Early signs only: 3 lead\(s\) with an outcome/);
+  assert.match(c.dhLeadReportText_([]), /No outcomes yet/);
+});
+
+test('Lead maintenance checks outcomes daily and sends the report once on Monday from 09:00', () => {
+  const { c, sent, store, clock } = leadHarness();
+  c.DH_VIEWING_CONTEXT_ = 'production';
+  let outcomeRuns = 0;
+  c.dhLeadOutcomes_ = () => { outcomeRuns++; return 0; };
+  clock.today = '2026-11-16'; clock.weekday = 1; clock.hour = 8;
+  c.dhLeadMaintenance_(); c.dhLeadMaintenance_();
+  assert.equal(outcomeRuns, 1); assert.equal(store['LIVE_LEAD_OUTCOME_DATE'], '2026-11-16');
+  assert.equal(sent.telegram.length, 0);
+  clock.hour = 9;
+  c.dhLeadMaintenance_();
+  assert.equal(sent.telegram.length, 1); assert.match(sent.telegram[0].text, /Weekly lead report/);
+  c.dhLeadMaintenance_();
+  assert.equal(sent.telegram.length, 1);
+  clock.today = '2026-11-17'; clock.weekday = 2;
+  c.dhLeadMaintenance_();
+  assert.equal(outcomeRuns, 2); assert.equal(sent.telegram.length, 1);
+  c.DH_VIEWING_CONTEXT_ = '';
+});
+
+function cancelHarness() {
+  const c = developmentHarness({ ...developmentSettings, DEV_DISABLE_TELEGRAM: 'false', DEV_TEST_TELEGRAM_ID: '222' });
+  const sent: any[] = [];
+  c.Utilities = { formatDate: () => 'Mon, 16 Nov 2026 · 18:00' };
+  c.tg = (method: string, data: any) => { sent.push([method, data]); return {}; };
+  c.save = () => {};
+  c.google = () => ({});
+  c.getEvent = () => ({ status: 'confirmed' });
+  c.MailApp = { sendEmail: () => {} };
+  const booking = (extra: Record<string, unknown> = {}): any => ({ booking_id: 'dh-test-1', booking_status: 'cancelling', property_title: 'Demo Villa',
+    customer_name: 'Test Buyer', email: 'test@example.test', agent_email: 'test@example.test', _calendar: 'test-calendar', _chat: '222',
+    viewing_datetime_utc: '2026-11-16T12:30:00.000Z', viewing_datetime_sri_lanka: '2026-11-16 18:00 +0530', _sent: {}, _jobs: [] as string[], ...extra });
+  return { c, sent, booking };
+}
+
+test('Cancelling a viewing queues a Telegram message for the agent and records who cancelled', () => {
+  const { c, booking } = cancelHarness();
+  const byBuyer = booking({ _cancelledBy: 'buyer' });
+  c.cancel(byBuyer);
+  assert.equal(byBuyer.booking_status, 'cancelled');
+  assert.equal(JSON.stringify(byBuyer._jobs), JSON.stringify(['cancelled', 'agent_cancelled']));
+  assert.equal(byBuyer._cancelledBy, 'buyer');
+  const moved = booking();
+  c.cancel(moved);
+  assert.equal(moved._cancelledBy, 'calendar');
+  assert.ok(moved._jobs.includes('agent_cancelled'));
+});
+
+test('Agent cancellation message says who cancelled, when and which booking', () => {
+  const { c, booking } = cancelHarness();
+  const buyer = c.dhCancelText_(booking({ booking_status: 'cancelled', _cancelledBy: 'buyer' }));
+  assert.equal(buyer, '❌ VIEWING CANCELLED BY BUYER\n🏠 Demo Villa\n📅 Mon, 16 Nov 2026 · 18:00 (Sri Lanka)\n👤 Test Buyer\n🆔 dh-test-1\nThe calendar event has been removed.');
+  assert.match(c.dhCancelText_(booking({ _cancelledBy: 'agent' })), /^❌ VIEWING CANCELLED BY AGENT/);
+  assert.match(c.dhCancelText_(booking({ _cancelledBy: 'calendar' })), /CALENDAR EVENT CHANGED[\s\S]*deleted or moved/);
+});
+
+test('The cancellation message is delivered once to the agent chat, and only for cancelled bookings', () => {
+  const { c, sent, booking } = cancelHarness();
+  const b = booking({ booking_status: 'cancelled', _cancelledBy: 'buyer', _jobs: ['agent_cancelled'] });
+  c.deliver(b, 'agent_cancelled');
+  const messages = sent.filter(([m]) => m === 'sendMessage');
+  assert.equal(messages.length, 1); assert.equal(messages[0][1].chat_id, '222');
+  assert.match(messages[0][1].text, /^❌ VIEWING CANCELLED BY BUYER/);
+  assert.ok(b._sent.agent_cancelled); assert.equal(b._jobs.length, 0);
+  c.deliver(b, 'agent_cancelled');
+  assert.equal(sent.filter(([m]) => m === 'sendMessage').length, 1);
+  const stillActive = booking({ booking_status: 'confirmed', _jobs: ['agent_cancelled'] });
+  c.deliver(stillActive, 'agent_cancelled');
+  assert.equal(sent.filter(([m]) => m === 'sendMessage').length, 1);
+});
+
+function tickHarness(bookings: any[]) {
+  const store: Record<string, string | undefined> = { ...developmentSettings, DEV_DISABLE_TELEGRAM: 'false', OPS_CHAT_ID: '333' };
+  const c = developmentHarness(store);
+  c.PropertiesService = { getScriptProperties: () => ({ getProperty: (k: string) => store[k] ?? null, setProperty: (k: string, v: string) => { store[k] = v; } }) };
+  const logs: string[] = [], alerts: string[] = [];
+  c.log = (_id: string, code: string) => logs.push(code);
+  c.tg = (method: string, data: any) => { if (method === 'sendMessage') alerts.push(data.text); return {}; };
+  c.save = () => {}; c.mirror = () => {}; c.pruneLogs = () => {};
+  c.dhWorkflowBookings_ = () => bookings;
+  return { c, logs, alerts };
+}
+const tickBooking = (extra: Record<string, unknown> = {}): any => ({ booking_id: 'dh-alert-1', booking_status: 'approved', created_at: new Date().toISOString(),
+  viewing_datetime_utc: new Date(Date.now() + 3 * 86400000).toISOString(), _approvalExpires: new Date(Date.now() + 86400000).toISOString(),
+  _sent: {}, _jobs: [], ...extra });
+
+test('A failed timer step logs a safe reason code and alerts once without mentioning Trigger.dev', () => {
+  const b = tickBooking();
+  const { c, logs, alerts } = tickHarness([b]);
+  c.reconcileCalendar = () => { throw new Error('GOOGLE_503'); };
+  const r = c.tick(false);
+  assert.equal(r.errors, 1);
+  assert.ok(logs.includes('WORKER_OPERATION_FAILED:GOOGLE_503'));
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0], 'DWELLHUNT SYSTEM ALERT\n⚠️ Booking dh-alert-1 hit a temporary problem (GOOGLE_503).\nIt will retry automatically on the next run. If this repeats, check the DH_Viewing_Log sheet.');
+  assert.doesNotMatch(alerts[0], /Trigger/);
+  c.tick(false);
+  assert.equal(alerts.length, 1);
+  assert.equal(logs.filter(x => x.startsWith('WORKER_OPERATION_FAILED')).length, 2);
+});
+
+test('Business codes and unexpected errors keep their safe codes; raw messages never appear', () => {
+  const { c } = tickHarness([]);
+  assert.equal(c.dhFailureCode_(Object.assign(new Error('x'), { publicCode: 'PRODUCTION_ROUTING_REQUIRED' })), 'PRODUCTION_ROUTING_REQUIRED');
+  assert.equal(c.dhFailureCode_(new Error('CALENDAR_ACCESS_FAILED')), 'CALENDAR_ACCESS_FAILED');
+  assert.equal(c.dhFailureCode_(new Error('buyer@example.test private detail')), 'GATEWAY_UNEXPECTED_ERROR');
+  assert.equal(c.dhFailureCode_(new TypeError('cannot read x of undefined')), 'GATEWAY_TYPEERROR');
+});
+
+test('A failed delivery names the message type and the reason', () => {
+  const b = tickBooking({ booking_status: 'pending_approval', _jobs: ['received'] });
+  const { c, logs, alerts } = tickHarness([b]);
+  c.deliver = () => { throw new Error('GOOGLE_500'); };
+  c.tick(false);
+  assert.ok(logs.includes('DELIVERY_FAILED:received:GOOGLE_500'));
+  assert.match(alerts[0], /⚠️ Booking dh-alert-1 could not send received \(GOOGLE_500\)\./);
+});
+
+function meetHarness(settings: Record<string, string> = {}, meetResponse: { code: number; body?: unknown } = { code: 200,
+  body: { name: 'spaces/abcSpace', meetingUri: 'https://meet.google.com/abc-defg-hij' } }) {
+  const c = developmentHarness({ ...developmentSettings, ...settings });
+  const calls: { method: string; path: string; body: any }[] = [], meetCalls: any[] = [], logs: string[] = [];
+  const start = new Date(Date.now() + 3 * 86400000).toISOString();
+  c.ScriptApp = { getOAuthToken: () => 'mock-token' };
+  c.UrlFetchApp = { fetch: (url: string, options: any) => { meetCalls.push({ url, body: JSON.parse(options.payload || '{}') });
+    return { getResponseCode: () => meetResponse.code, getContentText: () => JSON.stringify(meetResponse.body ?? {}) }; } };
+  c.save = () => {}; c.available = () => true; c.log = (_id: string, code: string) => logs.push(code);
+  c.getEvent = () => ({ httpCode: 404 });
+  c.google = (method: string, path: string, body: any) => {
+    calls.push({ method, path, body });
+    if (method === 'post') return { id: 'dhmeet1', extendedProperties: { private: { dwellhuntBookingId: 'dhmeet1' } },
+      start: { dateTime: start }, end: { dateTime: new Date(Date.parse(start) + 1800000).toISOString() } };
+    return {};
+  };
+  const booking: any = { booking_id: 'dhmeet1', booking_status: 'approved', property_title: 'Demo Villa', property_url: 'https://example.test/villa',
+    email: 'test@example.test', agent_email: 'test@example.test', _calendar: 'test-calendar', viewing_datetime_utc: start, _sent: {}, _jobs: [] };
+  return { c, calls, meetCalls, logs, booking };
+}
+
+test('With MEET_OPEN_ACCESS on, each viewing gets an Open Google Meet that anyone with the link can join', () => {
+  const { c, calls, meetCalls, booking } = meetHarness({ MEET_OPEN_ACCESS: 'true' });
+  c.reconcileCalendar(booking, [booking]);
+  assert.equal(meetCalls.length, 1);
+  assert.equal(meetCalls[0].url, 'https://meet.googleapis.com/v2/spaces');
+  assert.equal(JSON.stringify(meetCalls[0].body), JSON.stringify({ config: { accessType: 'OPEN', entryPointAccess: 'ALL' } }));
+  const created = calls.find(x => x.method === 'post')!;
+  assert.equal('location' in created.body, false);
+  assert.match(created.body.description, /Google Meet: https:\/\/meet\.google\.com\/abc-defg-hij/);
+  assert.equal('conferenceData' in created.body, false);
+  assert.equal(created.body.attendees.length, 1);
+  assert.equal(booking.google_meet_link, 'https://meet.google.com/abc-defg-hij');
+  assert.equal(booking.booking_status, 'confirmed');
+  assert.ok(booking._jobs.includes('confirmed') && booking._jobs.includes('agent_confirmed'));
+  const invite = calls.find(x => x.method === 'patch' && /sendUpdates=all/.test(x.path))!;
+  assert.match(invite.body.description, /Google Meet: https:\/\/meet\.google\.com\/abc-defg-hij/);
+  c.reconcileCalendar(booking, [booking]);
+  assert.equal(meetCalls.length, 1);
+});
+
+test('With the switch off, bookings keep using the calendar-created Meet and never call the Meet API', () => {
+  const { c, calls, meetCalls, booking } = meetHarness();
+  c.reconcileCalendar(booking, [booking]);
+  assert.equal(meetCalls.length, 0);
+  const created = calls.find(x => x.method === 'post')!;
+  assert.equal(created.body.conferenceData.createRequest.conferenceSolutionKey.type, 'hangoutsMeet');
+  assert.equal(booking.booking_status, 'awaiting_meeting_setup');
+});
+
+test('A Meet API failure falls back to the calendar-created Meet and logs only a code', () => {
+  const { c, calls, logs, booking } = meetHarness({ MEET_OPEN_ACCESS: 'true' }, { code: 403, body: { error: { message: 'private details' } } });
+  c.reconcileCalendar(booking, [booking]);
+  assert.ok(logs.includes('MEET_API_FAILED:GOOGLE_403'));
+  assert.doesNotMatch(JSON.stringify(logs), /private/);
+  const created = calls.find(x => x.method === 'post')!;
+  assert.ok(created.body.conferenceData); assert.equal(booking._meetUri, undefined);
+  const bad = meetHarness({ MEET_OPEN_ACCESS: 'true' }, { code: 200, body: { meetingUri: 'https://evil.example/x' } });
+  bad.c.reconcileCalendar(bad.booking, [bad.booking]);
+  assert.ok(bad.logs.includes('MEET_API_INVALID_RESPONSE'));
+});
+
+test('Meet readiness reports the API status without creating a meeting', () => {
+  const { c, meetCalls } = meetHarness({}, { code: 404 });
+  const r = c.dhMeetReadiness_();
+  assert.equal(r.meet_api_status, 404); assert.equal(r.open_access_enabled, false);
+  assert.equal(meetCalls.length, 1); assert.match(meetCalls[0].url, /spaces\/readiness-check-does-not-exist$/);
+});

@@ -1,0 +1,27 @@
+{
+  "name": "dwellhunt-trigger-workflows",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "dev": "trigger dev",
+    "deploy": "trigger deploy",
+    "start:api": "node --env-file=.env --import tsx src/server.ts"
+  },
+  "dependencies": {
+    "@trigger.dev/sdk": "4.8.5",
+    "google-auth-library": "^10.0.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@types/jsdom": "21.1.7",
+    "@types/node": "^22.0.0",
+    "jsdom": "26.1.0",
+    "trigger.dev": "4.8.5",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "wrangler": "4.156.0"
+  }
+}

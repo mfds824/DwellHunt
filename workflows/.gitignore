@@ -1,0 +1,27 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.trigger/
+backups/
+dist/
+.wrangler/
+.dev.vars*
+
+# Internal status/review notes: contain contact details and service IDs; keep local only.
+/AGENT_LISTING_REVIEW.md
+/AUTH_EMAIL_SETUP.md
+/HOMEPAGE_BUDGET_REVIEW.md
+/HOMEPAGE_CHANGES.md
+/HOMEPAGE_PUBLICATION.md
+/LISTING_ACTIVATION.md
+/LISTING_PRESENTATION_REVIEW.md
+/LISTING_STEP1_PUBLICATION.md
+/MAPS_PROVIDER_SETUP.md
+/MIGRATION_STATUS.md
+/OWNER_LISTING_REVIEW.md
+/PRODUCTION_LAUNCH.md
+/PROJECT_STATE.md
+/WEBSITE_PUBLICATION_REVIEW.md
+/wrangler.jsonc.txt
+/*.bak
