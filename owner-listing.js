@@ -22,6 +22,7 @@ export function submissionMessage(code) {
     RATE_LIMITED: 'We have already received several listings from you today. Please try again tomorrow or message us on WhatsApp.',
     INVALID_REQUEST: 'Some details need checking. Please review the sections marked below.',
     PAYLOAD_TOO_LARGE: 'This listing is too large to send. Shorten the description and try again.',
+    SIGNED_OUT: 'Your agent sign-in has ended. Your listing is still here — sign in again in a new tab, then press Send.',
   })[code] || 'We could not send your listing just now. Your details are still here — please try again in a few minutes.';
 }
 /** Sends the reviewed listing to DwellHunt. Throws an Error whose message is safe to show. */
@@ -43,15 +44,17 @@ export function createOwnerStart(React) {
     className: `dh-listing-choice p-3.5 rounded-2xl border text-center transition-all ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${current === value ? 'bg-emerald-50/70 text-emerald-950 border-emerald-700 ring-2 ring-emerald-600/20' : 'bg-stone-50 text-emerald-900 border-emerald-700 hover:bg-emerald-50'}` },
     h('input', { type: 'radio', name, value, checked: current === value, disabled, onChange: () => set(value), className: 'sr-only' }), h('span', { className: 'font-bold text-sm' }, text),
     current === value && h('span', { className: 'dh-listing-check', 'aria-hidden': 'true' }, '✓'));
-  return function OwnerStart({ onContinue, onAgencyPortal }) {
+  /** agent (optional): a signed-in agent starting a new listing; onAgencyPortal then returns to their dashboard. */
+  return function OwnerStart({ onContinue, onAgencyPortal, agent }) {
     const [purpose, setPurpose] = React.useState('');
     const [category, setCategory] = React.useState('');
     React.useEffect(() => { if (purpose === 'buy' && category === 'room') setCategory(''); }, [purpose]);
     return h('div', { className: 'dh-owner py-12 bg-stone-50 min-h-screen' }, h('div', { className: 'max-w-3xl mx-auto px-4 sm:px-6 lg:px-8' },
       h('div', { className: 'text-center max-w-xl mx-auto mb-10' },
-        h('span', { className: 'inline-flex px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold mb-2' }, 'FREE FOR PROPERTY OWNERS'),
-        h('h1', { className: 'text-3xl sm:text-4xl font-black text-stone-900 tracking-tight' }, 'List your property'),
-        h('p', { className: 'text-stone-500 text-sm mt-2' }, 'Tell us about your home in 7 short steps. DwellHunt checks every listing, keeps your phone number private and screens enquiries for you.')),
+        h('span', { className: 'inline-flex px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold mb-2' }, agent ? 'AGENT LISTING · ' + String(agent.agency || '').toUpperCase() : 'FREE FOR PROPERTY OWNERS'),
+        h('h1', { className: 'text-3xl sm:text-4xl font-black text-stone-900 tracking-tight' }, agent ? 'New listing' : 'List your property'),
+        h('p', { className: 'text-stone-500 text-sm mt-2' }, agent ? 'Choose rent or sale and the property type. DwellHunt reviews every listing before it goes live for 1 month.'
+          : 'Tell us about your home in 7 short steps. DwellHunt checks every listing, keeps your phone number private and screens enquiries for you.')),
       h('section', { className: 'bg-white rounded-3xl p-6 sm:p-10 border border-stone-200/90 shadow-sm space-y-8' },
         h('fieldset', { className: 'space-y-3' }, h('legend', { className: 'text-xs font-bold text-stone-700 uppercase tracking-wider mb-2' }, 'I want to'),
           h('div', { className: 'grid grid-cols-2 gap-3' }, choice('owner-purpose', 'rent', purpose, setPurpose, 'Rent it out'), choice('owner-purpose', 'buy', purpose, setPurpose, 'Sell it'))),
@@ -63,7 +66,7 @@ export function createOwnerStart(React) {
         h('div', { className: 'flex flex-wrap items-center justify-between gap-4' },
           h('span', { className: 'dh-owner-hint', role: 'status' }, purpose && category ? `${purpose === 'buy' ? 'Selling' : 'Renting out'} · ${CATEGORY_LABELS[category]}` : 'Choose both options to continue'),
           h('button', { type: 'button', className: primary, disabled: !purpose || !category, onClick: () => onContinue(purpose, category) }, 'Continue')),
-        h('div', { className: 'dh-owner-note space-y-1' },
+        agent ? h('div', { className: 'dh-owner-note' }, h('button', { type: 'button', className: 'underline font-bold', onClick: onAgencyPortal }, '← Back to your dashboard')) : h('div', { className: 'dh-owner-note space-y-1' },
           h('p', null, 'Are you an agent? ', h('button', { type: 'button', className: 'underline font-bold', onClick: onAgencyPortal }, 'List through the Agency Portal →')),
           h('p', null, 'Listing a whole apartment or housing project? ', h('a', { className: 'underline font-bold', href: WHATSAPP_URL, target: '_blank', rel: 'noopener noreferrer' }, 'Talk to us about a development listing →'))))));
   };
@@ -74,7 +77,8 @@ export function createOwnerListing(React) {
   const CountryCodePicker = createCountryCodePicker(React);
   const PriceInput = createPriceInput(React);
   const button = (label, onClick, className = secondary, rest = {}) => h('button', { type: 'button', className, onClick, ...rest }, label);
-  return function OwnerListing({ draft, onDraftChange, onStart }) {
+  /** agent (optional): { session, agent } of a signed-in agent; the listing is then sent to the agent route. */
+  return function OwnerListing({ draft, onDraftChange, onStart, agent }) {
     const d = draft, selection = d.selection, rules = rulesFor(selection.propertyCategory);
     const sale = selection.listingPurpose === 'buy', shortStay = !sale && d.rentalType === 'short-stay';
     const [errors, setErrors] = React.useState({});
@@ -308,7 +312,8 @@ export function createOwnerListing(React) {
       const problems = validateOwnerDraft({ ...latest.current }, true);
       if (problems.length) { setErrors(Object.assign({}, ...problems.filter(s => s.step === 6).map(s => s.errors))); setSend({ phase: 'error', message: 'Please complete the items marked above.', reference: '' }); return; }
       const config = window.DWELLHUNT_VIEWING || {};
-      if (!config.ownerListingUrl) { setSend({ phase: 'error', message: 'Listing submission is being set up. Please try again later or message us on WhatsApp.', reference: '' }); return; }
+      const sendUrl = agent ? config.agentListingUrl : config.ownerListingUrl;
+      if (!sendUrl) { setSend({ phase: 'error', message: 'Listing submission is being set up. Please try again later or message us on WhatsApp.', reference: '' }); return; }
       if (!token) { setSend({ phase: 'error', message: 'Please complete the security check above.', reference: '' }); return; }
       try {
         setSend({ phase: 'uploading', message: 'Uploading your photos…', reference: '' });
@@ -329,7 +334,7 @@ export function createOwnerListing(React) {
           onDraftChange(old => ({ ...old, photos: old.photos.map(done), floorPlan: old.floorPlan && done(old.floorPlan) }));
         }
         setSend({ phase: 'sending', message: 'Sending your listing to DwellHunt…', reference: '' });
-        const result = await sendOwnerListing(config.ownerListingUrl, ownerSubmission(current), token, honeypot.current?.value || '');
+        const result = await sendOwnerListing(sendUrl, agent ? { ...ownerSubmission(current), session: agent.session } : ownerSubmission(current), token, honeypot.current?.value || '');
         try { localStorage.removeItem(OWNER_DRAFT_KEY); } catch { /* nothing saved */ }
         setSaveEnabled(false); patch({ status: 'sent', deviceSavingEnabled: false });
         setSend({ phase: 'done', message: '', reference: result.reference });
@@ -355,9 +360,10 @@ export function createOwnerListing(React) {
         h('p', null, 'Your reference number is'), h('p', { className: 'text-2xl font-black text-emerald-900 tracking-wider' }, send.reference),
         h('div', { className: 'dh-owner-note text-left space-y-1' }, h('strong', null, 'What happens next'),
           h('ol', { className: 'list-decimal pl-5 space-y-1' }, h('li', null, `We’ve emailed the details to ${d.email}.`),
-            h('li', null, 'Within 1 working day DwellHunt will call or WhatsApp you to verify the listing and ask for one proof of ownership.'),
-            h('li', null, 'Once verified, your listing goes live for 1 month, and we pass genuine enquiries to you.'))),
-        button('Back to DwellHunt', onStart, primary))));
+            agent ? h('li', null, 'DwellHunt will review it, usually within 1 working day, and may contact you to confirm you are authorised to advertise it.')
+              : h('li', null, 'Within 1 working day DwellHunt will call or WhatsApp you to verify the listing and ask for one proof of ownership.'),
+            h('li', null, agent ? 'Once approved, it goes live for 1 month, and buyer enquiries are emailed to you.' : 'Once verified, your listing goes live for 1 month, and we pass genuine enquiries to you.'))),
+        button(agent ? 'Back to your dashboard' : 'Back to DwellHunt', onStart, primary))));
 
     return h('div', { className: 'dh-owner py-12 bg-stone-50 min-h-screen' }, h('div', { className: 'max-w-4xl mx-auto px-4 sm:px-6 lg:px-8' },
       h('div', { className: 'text-center max-w-xl mx-auto mb-8' },

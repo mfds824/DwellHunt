@@ -1,0 +1,67 @@
+/* "List a property" chooser, agent application, sign-in and dashboard (agent-portal.js). */
+.dh-agent-wrap { max-width: 860px; margin: 0 auto; padding: 0 16px; }
+.dh-agent h1 { font-size: clamp(26px, 4vw, 36px); font-weight: 900; color: #1c1917; letter-spacing: -0.02em; margin: 0 0 8px; }
+.dh-agent-hero { text-align: center; max-width: 560px; margin: 0 auto 32px; }
+.dh-agent-hero p { color: #57534e; font-size: 15px; margin: 0; }
+.dh-agent-pill { display: inline-flex; padding: 4px 12px; border-radius: 999px; background: #d1fae5; color: #064e3b; font-size: 12px; font-weight: 700; margin-bottom: 10px; }
+.dh-agent-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.dh-agent-choice { background: #fff; border: 1px solid #e7e5e4; border-radius: 24px; padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+.dh-agent-choice-main { border: 2px solid #064e3b; box-shadow: 0 0 0 4px rgba(6, 78, 59, 0.08); }
+.dh-agent-choice-top { display: flex; align-items: center; justify-content: space-between; }
+.dh-agent-choice-icon { font-size: 24px; }
+.dh-agent-tag { font-size: 12px; font-weight: 700; color: #064e3b; background: #d1fae5; border-radius: 999px; padding: 3px 10px; }
+.dh-agent-choice h2 { font-size: 19px; font-weight: 800; color: #1c1917; margin: 2px 0 0; }
+.dh-agent-choice p { color: #57534e; font-size: 14px; line-height: 1.55; margin: 0; }
+.dh-agent-choice ul { list-style: none; padding: 0; margin: 4px 0 8px; display: grid; gap: 6px; font-size: 14px; color: #44403c; }
+.dh-agent-choice li span { color: #047857; font-weight: 800; margin-right: 8px; }
+.dh-agent-choice button { margin-top: auto; width: 100%; }
+.dh-agent-small { font-size: 12px; color: #57534e; text-align: center; text-decoration: underline; }
+.dh-agent-primary, .dh-agent-secondary { border-radius: 14px; padding: 12px 20px; font-weight: 800; font-size: 14px; cursor: pointer; }
+.dh-agent-primary { background: #064e3b; color: #fff; border: 1px solid #064e3b; }
+.dh-agent-primary:hover { background: #065f46; }
+.dh-agent-primary:disabled { opacity: 0.55; cursor: wait; }
+.dh-agent-secondary { background: #fff; color: #064e3b; border: 1px solid #047857; }
+.dh-agent-secondary:hover { background: #ecfdf5; }
+.dh-agent-card { background: #fff; border: 1px solid #e7e5e4; border-radius: 24px; padding: clamp(20px, 4vw, 40px); max-width: 560px; margin: 0 auto; }
+.dh-agent-center { text-align: center; }
+.dh-agent-icon { width: 52px; height: 52px; border-radius: 50%; background: #064e3b; color: #fff; display: grid; place-items: center; font-size: 26px; font-weight: 900; margin: 0 auto 12px; }
+.dh-agent-eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #047857; margin: 0 0 6px; }
+.dh-agent-lead { color: #57534e; font-size: 14px; line-height: 1.6; margin: 0 0 16px; }
+.dh-agent-form { display: grid; gap: 14px; }
+.dh-agent-field { display: grid; gap: 6px; }
+.dh-agent-field label { font-size: 12px; font-weight: 700; color: #44403c; }
+.dh-agent-field input, .dh-agent-phone input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid #e7e5e4; background: #fafaf9; font-size: 15px; color: #1c1917; box-sizing: border-box; }
+.dh-agent-field input:focus, .dh-agent-phone input:focus { outline: 2px solid #047857; outline-offset: 1px; }
+.dh-agent [aria-invalid="true"] { border-color: #dc2626; background: #fef2f2; }
+.dh-agent-phone { display: grid; grid-template-columns: 76px 1fr; gap: 8px; }
+.dh-agent-consent { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: #44403c; line-height: 1.5; }
+.dh-agent-consent input { margin-top: 3px; accent-color: #064e3b; }
+.dh-agent-consent[data-invalid="true"] { color: #b91c1c; }
+.dh-agent-consent a { text-decoration: underline; }
+.dh-agent-error { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 10px 12px; font-size: 13px; margin: 0; }
+.dh-agent-link { background: none; border: 0; padding: 0; color: #064e3b; font-weight: 800; text-decoration: underline; cursor: pointer; font-size: 13px; }
+.dh-agent-foot { margin: 18px 0 0; font-size: 13px; color: #57534e; text-align: center; }
+.dh-agent-back { display: block; max-width: 560px; margin: 0 auto 12px; background: none; border: 0; color: #57534e; font-weight: 700; font-size: 13px; cursor: pointer; padding: 0; text-align: left; width: 100%; }
+.dh-agent .dh-agent-card:has(.dh-agent-dash-head) { max-width: 860px; }
+.dh-agent-dash-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+.dh-agent-dash-head .dh-agent-lead { margin: 0; }
+.dh-agent-dash-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dh-agent-h2 { font-size: 16px; font-weight: 800; color: #1c1917; margin: 20px 0 10px; }
+.dh-agent-empty { border: 1px dashed #d6d3d1; border-radius: 16px; padding: 18px; color: #57534e; font-size: 14px; }
+.dh-agent-empty p { margin: 0 0 6px; }
+.dh-agent-list { list-style: none; padding: 0; margin: 0; border: 1px solid #e7e5e4; border-radius: 16px; overflow: hidden; }
+.dh-agent-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid #f5f5f4; }
+.dh-agent-list li:first-child { border-top: 0; }
+.dh-agent-title { margin: 0; font-weight: 800; color: #1c1917; font-size: 14px; }
+.dh-agent-meta { margin: 2px 0 0; font-size: 12px; color: #78716c; }
+.dh-agent-status { display: grid; justify-items: end; font-size: 12px; font-weight: 800; color: #57534e; white-space: nowrap; }
+.dh-agent-status small { font-weight: 600; color: #78716c; }
+.dh-agent-status[data-status="published"] { color: #047857; }
+.dh-agent-status[data-status="pending review"], .dh-agent-status[data-status="changes requested"] { color: #b45309; }
+.dh-agent-status[data-status="rejected"] { color: #b91c1c; }
+@media (max-width: 479px) {
+  .dh-agent-list li { flex-direction: column; align-items: flex-start; }
+  .dh-agent-status { justify-items: start; }
+  .dh-agent-dash-actions { width: 100%; }
+  .dh-agent-dash-actions button { flex: 1; }
+}
