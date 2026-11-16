@@ -24,11 +24,20 @@ export function agentMessage(code) {
     CODE_LOCKED: 'Too many wrong tries. Ask for a new code.',
     SIGNED_OUT: 'Your sign-in has ended. Please sign in again.',
     RATE_LIMITED: 'Too many requests just now. Please try again later.',
+    BUSY_RETRY: 'DwellHunt is busy for a moment. Please complete the security check again and retry.',
   })[code] || 'Something went wrong on our side. Please try again in a few minutes, or message us on WhatsApp.';
 }
 
-/** POSTs to an agent route and returns the JSON body. Throws an Error whose message is safe to show. */
-export async function agentCall(path, body, fetchImpl = fetch) {
+const RETRYABLE = new Set(['verify', 'me', 'signout']);
+/** POSTs to an agent route and returns the JSON body. Calls without a one-time human-check token are retried
+ * a few times when the backend is briefly busy. Throws an Error whose message is safe to show. */
+export async function agentCall(path, body, fetchImpl = fetch, pause = ms => new Promise(r => setTimeout(r, ms))) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await agentCallOnce(path, body, fetchImpl); }
+    catch (error) { if (error.code !== 'BUSY_RETRY' || !RETRYABLE.has(path) || attempt >= 3) throw error; await pause(1500 * (attempt + 1)); }
+  }
+}
+async function agentCallOnce(path, body, fetchImpl) {
   const base = (globalThis.window?.DWELLHUNT_VIEWING || {}).agentApiUrl;
   if (!base) throw Object.assign(new Error('Agent accounts are being set up. Please try again soon.'), { code: 'NOT_CONFIGURED' });
   let response;

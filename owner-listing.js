@@ -66,9 +66,8 @@ export function createOwnerStart(React) {
         h('div', { className: 'flex flex-wrap items-center justify-between gap-4' },
           h('span', { className: 'dh-owner-hint', role: 'status' }, purpose && category ? `${purpose === 'buy' ? 'Selling' : 'Renting out'} · ${CATEGORY_LABELS[category]}` : 'Choose both options to continue'),
           h('button', { type: 'button', className: primary, disabled: !purpose || !category, onClick: () => onContinue(purpose, category) }, 'Continue')),
-        agent ? h('div', { className: 'dh-owner-note' }, h('button', { type: 'button', className: 'underline font-bold', onClick: onAgencyPortal }, '← Back to your dashboard')) : h('div', { className: 'dh-owner-note space-y-1' },
-          h('p', null, 'Are you an agent? ', h('button', { type: 'button', className: 'underline font-bold', onClick: onAgencyPortal }, 'List through the Agency Portal →')),
-          h('p', null, 'Listing a whole apartment or housing project? ', h('a', { className: 'underline font-bold', href: WHATSAPP_URL, target: '_blank', rel: 'noopener noreferrer' }, 'Talk to us about a development listing →'))))));
+        // Agents and development listings are offered on the "Who's listing today?" page, so owners see only their own form.
+        agent && h('div', { className: 'dh-owner-note' }, h('button', { type: 'button', className: 'underline font-bold', onClick: onAgencyPortal }, '← Back to your dashboard')))));
   };
 }
 
