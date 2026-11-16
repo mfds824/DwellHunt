@@ -87,6 +87,12 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
     return [token, reset];
   }
 
+  const KNOWN_KEY = 'dwellhunt_agent_known';
+  const markKnown = () => { try { localStorage.setItem(KNOWN_KEY, '1'); } catch { /* private mode */ } };
+  const isKnown = () => { try { return localStorage.getItem(KNOWN_KEY) === '1'; } catch { return false; } };
+  const tabs = (active, onApply, onSignIn) => h('div', { className: 'dh-agent-tabs', role: 'tablist', 'aria-label': 'Agent portal' },
+    h('button', { type: 'button', role: 'tab', 'aria-selected': active === 'apply', className: active === 'apply' ? 'is-active' : '', onClick: onApply }, 'New agent? Apply'),
+    h('button', { type: 'button', role: 'tab', 'aria-selected': active === 'signin', className: active === 'signin' ? 'is-active' : '', onClick: onSignIn }, 'Approved? Sign in'));
   const input = (id, label, value, onChange, extra = {}) => h('div', { className: 'dh-agent-field' },
     h('label', { htmlFor: id }, label), h('input', { id, value, onChange: e => onChange(e.target.value), ...extra }));
   const shell = (...children) => h('div', { className: 'dh-owner dh-agent py-12 bg-stone-50 min-h-screen' }, h('div', { className: 'dh-agent-wrap' }, ...children));
@@ -103,7 +109,7 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setState({ busy: false, message: 'Enter the email address you applied with.' }); return; }
       if (!token) { setState({ busy: false, message: 'Please complete the security check.' }); return; }
       setState({ busy: true, message: '' });
-      try { await agentCall('code', { email: email.trim(), turnstile_token: token }); setStep('code'); setState({ busy: false, message: '' }); }
+      try { await agentCall('code', { email: email.trim(), turnstile_token: token }); markKnown(); setStep('code'); setState({ busy: false, message: '' }); }
       catch (error) { reset(); setState({ busy: false, message: error.message }); }
     };
     const verify = async event => {
@@ -112,6 +118,7 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
       setState({ busy: true, message: '' });
       try {
         const r = await agentCall('verify', { email: email.trim(), code: code.replace(/\s/g, '') });
+        markKnown();
         const session = { session: r.session, expires: r.expires, agent: r.agent };
         saveAgentSession(session); onSignedIn(session);
       } catch (error) { setState({ busy: false, message: error.message }); if (['CODE_EXPIRED', 'CODE_LOCKED'].includes(error.code)) { setCode(''); setStep('email'); } }
@@ -120,21 +127,26 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
       h('button', { type: 'button', className: 'dh-agent-back', onClick: onBack }, '← Back'),
       h('section', { className: 'dh-agent-card' },
         h('p', { className: 'dh-agent-eyebrow' }, 'Agent portal'),
+        tabs('signin', onApply, () => {}),
         h('h1', null, step === 'email' ? 'Sign in as an agent' : 'Check your email'),
         step === 'email'
           ? h('form', { onSubmit: askCode, noValidate: true, className: 'dh-agent-form' },
               h('p', { className: 'dh-agent-lead' }, 'Enter the email you applied with. We’ll send you a 6-digit code — there’s no password to remember.'),
+              h('p', { className: 'dh-agent-notice' }, h('strong', null, 'Codes are only sent to approved agents. '), 'No account yet? ',
+                h('button', { type: 'button', className: 'dh-agent-link', onClick: onApply }, 'Apply first'), ' — it takes a minute, and DwellHunt usually approves within 1 working day.'),
               input('dh-agent-signin-email', 'Email address', email, setEmail, { type: 'email', autoComplete: 'email', required: true }),
               h('div', { ref: check, className: 'dh-captcha', 'aria-label': 'Security check' }),
               state.message && h('p', { role: 'alert', className: 'dh-agent-error' }, state.message),
               h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Sending…' : 'Email me a code'))
           : h('form', { onSubmit: verify, noValidate: true, className: 'dh-agent-form' },
-              h('p', { className: 'dh-agent-lead' }, `If ${email.trim()} has an approved agent account, a 6-digit code is on its way. It expires in 10 minutes.`),
+              h('p', { className: 'dh-agent-lead' }, `If ${email.trim()} belongs to an approved agent, a 6-digit code arrives within a minute. Check your spam folder too. The code expires in 10 minutes.`),
+              h('p', { className: 'dh-agent-notice' }, 'No email? Codes are only sent to approved agents, so you may need to ',
+                h('button', { type: 'button', className: 'dh-agent-link', onClick: onApply }, 'apply first'), ', or your application may still be waiting for approval.'),
               input('dh-agent-code', '6-digit code', code, setCode, { inputMode: 'numeric', autoComplete: 'one-time-code', maxLength: 7, required: true }),
               state.message && h('p', { role: 'alert', className: 'dh-agent-error' }, state.message),
               h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Checking…' : 'Sign in'),
               h('button', { type: 'button', className: 'dh-agent-link', onClick: () => { setStep('email'); setCode(''); setState({ busy: false, message: '' }); } }, 'Use a different email or send a new code')),
-        h('p', { className: 'dh-agent-foot' }, 'New to DwellHunt? ', h('button', { type: 'button', className: 'dh-agent-link', onClick: onApply }, 'Apply for an agent account →'))));
+        null));
   }
 
   function Apply({ onSignIn, onBack }) {
@@ -156,21 +168,27 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
       if (!token) { setState({ busy: false, message: 'Please complete the security check.', fields: [], done: false }); return; }
       setState({ busy: true, message: '', fields: [], done: false });
       try {
-        await agentCall('signup', { name: f.name.trim(), agency: f.agency.trim(), email: f.email.trim(), phone, registrationNo: f.registrationNo.trim(),
+        const r = await agentCall('signup', { name: f.name.trim(), agency: f.agency.trim(), email: f.email.trim(), phone, registrationNo: f.registrationNo.trim(),
           consent: true, turnstile_token: token, website: honeypot.current?.value || '' });
-        setState({ busy: false, message: '', fields: [], done: true });
+        markKnown();
+        if (r.duplicate && r.status === 'approved') { reset(); setState({ busy: false, message: '', fields: [], done: false, approved: true }); return; }
+        setState({ busy: false, message: '', fields: [], done: true, already: !!r.duplicate });
       } catch (error) { reset(); setState({ busy: false, message: error.message, fields: error.fields || [], done: false }); }
     };
     const bad = key => state.fields.includes(key) || undefined;
     if (state.done) return shell(h('section', { className: 'dh-agent-card dh-agent-center' },
       h('div', { className: 'dh-agent-icon', 'aria-hidden': 'true' }, '✓'),
-      h('h1', null, 'Application received'),
-      h('p', { className: 'dh-agent-lead' }, `Thank you, ${f.name.trim()}. Our team will check your details, usually within 1 working day, and may call or WhatsApp you. We’ll email ${f.email.trim()} as soon as your account is approved.`),
+      h('h1', null, state.already ? 'You’ve already applied' : 'Application received'),
+      h('p', { className: 'dh-agent-lead' }, state.already
+        ? `Your application for ${f.email.trim()} is waiting for approval. We’ll email you as soon as it’s approved, usually within 1 working day.`
+        : `Thank you, ${f.name.trim()}. Our team will check your details, usually within 1 working day, and may call or WhatsApp you. We’ll email ${f.email.trim()} as soon as your account is approved.`),
+      h('p', { className: 'dh-agent-notice' }, 'You can sign in once you receive the “account approved” email. Sign-in codes are not sent before that.'),
       h('button', { type: 'button', className: secondary, onClick: onSignIn }, 'Go to agent sign-in')));
     return shell(
       h('button', { type: 'button', className: 'dh-agent-back', onClick: onBack }, '← Back'),
       h('section', { className: 'dh-agent-card' },
         h('p', { className: 'dh-agent-eyebrow' }, 'Agent portal'),
+        tabs('apply', () => {}, onSignIn),
         h('h1', null, 'Apply for an agent account'),
         h('p', { className: 'dh-agent-lead' }, 'DwellHunt checks every agent before they can list. Once approved, you sign in with a code sent to your email.'),
         h('form', { onSubmit: submit, noValidate: true, className: 'dh-agent-form' },
@@ -187,9 +205,10 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
             h('span', null, 'DwellHunt may use these details to check my application and contact me, as described in the ', h('a', { href: './privacy.html', target: '_blank', rel: 'noopener noreferrer' }, 'privacy policy'), '.')),
           h('div', { className: 'dh-hp', 'aria-hidden': 'true' }, h('label', null, 'Leave empty', h('input', { ref: honeypot, type: 'text', tabIndex: -1, autoComplete: 'off', defaultValue: '' }))),
           h('div', { ref: check, className: 'dh-captcha', 'aria-label': 'Security check' }),
+          state.approved && h('p', { role: 'alert', className: 'dh-agent-notice' }, 'This email already has an approved agent account. ',
+            h('button', { type: 'button', className: 'dh-agent-link', onClick: onSignIn }, 'Sign in instead →')),
           state.message && h('p', { role: 'alert', className: 'dh-agent-error' }, state.message),
-          h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Sending…' : 'Send application')),
-        h('p', { className: 'dh-agent-foot' }, 'Already approved? ', h('button', { type: 'button', className: 'dh-agent-link', onClick: onSignIn }, 'Sign in →'))));
+          h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Sending…' : 'Send application'))));
   }
 
   function Dashboard({ session, onCreate, onSignedOut }) {
@@ -227,7 +246,8 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
 
   function AgentPortal({ onBack }) {
     const [session, setSession] = React.useState(() => loadAgentSession());
-    const [view, setView] = React.useState(() => loadAgentSession() ? 'dashboard' : 'signin');
+    const [view, setView] = React.useState(() => loadAgentSession() ? 'dashboard'
+      : /^#agents=signin/.test(location.hash) || isKnown() ? 'signin' : 'apply');
     const [draft, setDraft] = React.useState(null);
     React.useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [view, !!draft]);
     const signedOut = () => { setSession(null); setDraft(null); setView('signin'); };
