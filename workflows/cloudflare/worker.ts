@@ -16,6 +16,11 @@ const ROUTES: Record<string, string> = {
   "/api/dwellhunt/agents/me": "dwellhunt-agent-me",
   "/api/dwellhunt/agents/signout": "dwellhunt-agent-signout",
   "/api/dwellhunt/agents/listings": "dwellhunt-agent-listing",
+  "/api/dwellhunt/agents/profile": "dwellhunt-agent-profile",
+  "/api/dwellhunt/agents/posts": "dwellhunt-agent-post",
+  "/api/dwellhunt/agents/posts/delete": "dwellhunt-agent-post-delete",
+  "/api/dwellhunt/agents/public": "dwellhunt-agents-public",
+  "/api/dwellhunt/agents/public/one": "dwellhunt-agent-public",
   "/api/dwellhunt/bookings": "dwellhunt-viewing-booking",
   "/api/dwellhunt/agent": "dwellhunt-viewing-agent-approval",
   "/api/dwellhunt/buyer-actions": "dwellhunt-viewing-buyer-actions",
@@ -34,11 +39,30 @@ const OWNER_PUBLIC = "dwellhunt-owner-listings-public";
 const AGENT_TASKS: Record<string, string> = {
   "dwellhunt-agent-signup": "agent_signup", "dwellhunt-agent-code": "agent_code", "dwellhunt-agent-verify": "agent_verify",
   "dwellhunt-agent-me": "agent_me", "dwellhunt-agent-signout": "agent_signout", "dwellhunt-agent-listing": "agent_listing",
+  "dwellhunt-agent-profile": "agent_profile_save", "dwellhunt-agent-post": "agent_post", "dwellhunt-agent-post-delete": "agent_post_delete",
 };
+// Read-only public agent pages (GET). Only public profile fields leave the gateway.
+const AGENT_PUBLIC_TASKS: Record<string, string> = { "dwellhunt-agents-public": "agents_public", "dwellhunt-agent-public": "agent_public" };
+const cut = (v: unknown, n: number) => String(v ?? "").slice(0, n);
+const safePost = (x: unknown) => { const p = x && typeof x === "object" ? x as Record<string, unknown> : {};
+  return { id: cut(p.id, 20), agentId: cut(p.agentId, 20), kind: p.kind === "story" ? "story" : "post", caption: cut(p.caption, 500),
+    photo: /^https:\/\/res\.cloudinary\.com\//.test(String(p.photo ?? "")) ? cut(p.photo, 400) : "", listingRef: cut(p.listingRef, 20), at: cut(p.at, 40), expiresAt: cut(p.expiresAt, 40) }; };
+export function publicAgentSafe(x: unknown) {
+  const a = x && typeof x === "object" ? x as Record<string, unknown> : {};
+  const out: Record<string, unknown> = { id: cut(a.id, 20), name: cut(a.name, 120), agency: cut(a.agency, 120), bio: cut(a.bio, 600),
+    areas: Array.isArray(a.areas) ? a.areas.slice(0, 8).map(v => cut(v, 40)) : [], verified: a.verified === true,
+    logo: /^https:\/\/res\.cloudinary\.com\//.test(String(a.logo ?? "")) ? cut(a.logo, 400) : "" };
+  if (Array.isArray(a.stories)) out.stories = a.stories.slice(0, 10).map(safePost);
+  if (Array.isArray(a.posts)) out.posts = a.posts.slice(0, 30).map(safePost);
+  if (Array.isArray(a.listings)) out.listings = a.listings.slice(0, 50);
+  if (typeof a.listingCount === "number") out.listingCount = a.listingCount;
+  return out;
+}
 const AGENT_TURNSTILE_ACTIONS: Record<string, string> = {
   "dwellhunt-agent-signup": "agent_signup", "dwellhunt-agent-code": "agent_signin", "dwellhunt-agent-listing": "owner_listing",
 };
-const AGENT_SESSION_TASKS = new Set(["dwellhunt-agent-me", "dwellhunt-agent-signout", "dwellhunt-agent-listing"]);
+const AGENT_SESSION_TASKS = new Set(["dwellhunt-agent-me", "dwellhunt-agent-signout", "dwellhunt-agent-listing",
+  "dwellhunt-agent-profile", "dwellhunt-agent-post", "dwellhunt-agent-post-delete"]);
 /** Only these fields of an agent reply reach the browser. */
 export function agentSafeResponse(value: unknown) {
   const safe = safeResponse(value);
@@ -49,6 +73,9 @@ export function agentSafeResponse(value: unknown) {
     const a = r.agent as Record<string, unknown>;
     safe.agent = Object.fromEntries(["id", "name", "agency", "email", "phone"].map(k => [k, String(a[k] ?? "").slice(0, 254)]));
   }
+  if (r.profile && typeof r.profile === "object") { const p = publicAgentSafe(r.profile); safe.profile = { bio: p.bio, areas: p.areas, logo: p.logo }; }
+  if (Array.isArray(r.posts)) safe.posts = r.posts.slice(0, 50).map(x => { const p = x && typeof x === "object" ? x as Record<string, unknown> : {};
+    return { ...safePost(p), expired: p.expired === true }; });
   if (Array.isArray(r.listings)) safe.listings = r.listings.slice(0, 100).map(item => {
     const l = item && typeof item === "object" ? item as Record<string, unknown> : {};
     return Object.fromEntries(["reference", "title", "status", "purpose", "category", "price", "currency", "pricePeriod", "city", "sentAt", "publishedAt", "expiresAt"]
@@ -183,6 +210,7 @@ const GATEWAY_ACTIONS: Record<string, string> = {
   [OWNER_LISTING]: "owner_listing",
   [OWNER_PUBLIC]: "owner_listings_public",
   ...AGENT_TASKS,
+  ...AGENT_PUBLIC_TASKS,
   "dwellhunt-viewing-booking": "intake",
   "dwellhunt-viewing-agent-approval": "telegram",
   "dwellhunt-viewing-buyer-actions": "customer_action",
@@ -310,13 +338,29 @@ export default {
     if (origin && (origin === env.WEBSITE_ORIGIN || githubTest)) {
       Object.assign(cors, {
         "Access-Control-Allow-Origin": origin,
-        "Access-Control-Allow-Methods": taskId === OWNER_PUBLIC ? "GET, OPTIONS" : "POST, OPTIONS",
+        "Access-Control-Allow-Methods": taskId === OWNER_PUBLIC || taskId in AGENT_PUBLIC_TASKS ? "GET, OPTIONS" : "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       });
     }
 
     if (!taskId) return json({ ok: false, code: "NOT_FOUND" }, 404, cors);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+    if (taskId in AGENT_PUBLIC_TASKS) {
+      if (request.method !== "GET") return json({ ok: false, code: "METHOD_NOT_ALLOWED" }, 405, cors);
+      const id = new URL(request.url).searchParams.get("id") || "";
+      if (taskId === "dwellhunt-agent-public" && !/^AG-\d{4}-\d{4}$/.test(id)) return json({ ok: false, code: "NOT_FOUND" }, 404, cors);
+      if (!usesAppsScriptDirect(env, taskId)) return json({ ok: false, code: "SERVICE_UNAVAILABLE" }, 503, cors);
+      try {
+        const result = await callAppsScript(GATEWAY_ACTIONS[taskId], taskId === "dwellhunt-agent-public" ? { id } : {}, env);
+        if (result.ok !== true) return json({ ok: false, code: String(result.code || "NOT_FOUND").slice(0, 40) }, Number(result.httpStatus) || 404, cors);
+        const body = taskId === "dwellhunt-agent-public" ? { ok: true, agent: publicAgentSafe(result.agent) }
+          : { ok: true, agents: Array.isArray(result.agents) ? result.agents.slice(0, 200).map(publicAgentSafe) : [] };
+        return json(body, 200, { ...cors, "Cache-Control": "public, max-age=60" });
+      } catch (error) {
+        console.error("Apps Script gateway failed", { action: GATEWAY_ACTIONS[taskId], reason: failureCode(error) });
+        return json({ ok: false, code: "SERVICE_UNAVAILABLE" }, 503, cors);
+      }
+    }
     if (taskId === OWNER_PUBLIC) {
       // Read-only feed of verified owner listings. Only listing fields leave the gateway; a short cache absorbs traffic.
       if (request.method !== "GET") return json({ ok: false, code: "METHOD_NOT_ALLOWED" }, 405, cors);
@@ -354,7 +398,8 @@ export default {
     const data = payload as Record<string, unknown>;
     if (AGENT_SESSION_TASKS.has(taskId) && !(typeof data.session === "string" && /^[a-f0-9]{64}$/.test(data.session)))
       return json({ ok: false, code: "SIGNED_OUT" }, 401, cors);
-    if (taskId !== "dwellhunt-viewing-agent-approval" && !["dwellhunt-agent-verify", "dwellhunt-agent-me", "dwellhunt-agent-signout"].includes(taskId)) {
+    if (taskId !== "dwellhunt-viewing-agent-approval" && !["dwellhunt-agent-verify", "dwellhunt-agent-me", "dwellhunt-agent-signout",
+      "dwellhunt-agent-profile", "dwellhunt-agent-post", "dwellhunt-agent-post-delete"].includes(taskId)) {
       const turnstileToken = data.turnstile_token ?? data.turnstileToken ?? data["cf-turnstile-response"];
       if (taskId === "dwellhunt-viewing-booking" || taskId === "dwellhunt-viewing-buyer-actions") {
         // Apps Script is the sole Siteverify verifier for bookings and management actions. Forward the fresh token

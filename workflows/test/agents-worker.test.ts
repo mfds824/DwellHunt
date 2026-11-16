@@ -95,3 +95,45 @@ test("an agent listing needs both a session and the owner_listing human check", 
     assert.equal((await worker.fetch(post("listings", { session: SESSION, turnstile_token: "t" }), env)).status, 403);
   } finally { globalThis.fetch = original; }
 });
+
+const get = (path: string) => new Request("https://api.example.test/api/dwellhunt/agents/" + path, { method: "GET", headers: { Origin: env.WEBSITE_ORIGIN } });
+
+test("public agent pages are GET-only, need a well-formed id and leak no contact details", async () => {
+  const original = globalThis.fetch;
+  try {
+    let calls = stub({ ok: true, httpStatus: 200, agent: { id: "AG-2611-0001", name: "K", agency: "Lanka Homes", email: "k@x.test", phone: "+9477",
+      bio: "Hi", areas: ["Colombo 05"], logo: "https://evil.example.test/x.jpg", verified: true,
+      stories: [{ id: "PS-1", kind: "story", caption: "Just listed", photo: "https://res.cloudinary.com/d/a.jpg", secret: "x" }], posts: [], listings: [] } });
+    const r = await worker.fetch(get("public/one?id=AG-2611-0001"), env);
+    const body = await r.json() as any;
+    assert.equal(r.status, 200); assert.equal(calls[0].body.action, "agent_public"); assert.equal(calls[0].body.payload.id, "AG-2611-0001");
+    assert.equal("email" in body.agent, false); assert.equal("phone" in body.agent, false);
+    assert.equal(body.agent.logo, "", "non-Cloudinary logo dropped");
+    assert.equal("secret" in body.agent.stories[0], false);
+    calls = stub({ ok: true, httpStatus: 200 });
+    assert.equal((await worker.fetch(get("public/one?id=../../x"), env)).status, 404);
+    assert.equal(calls.length, 0);
+    assert.equal((await worker.fetch(post("public", {}), env)).status, 405);
+    calls = stub({ ok: true, httpStatus: 200, agents: [{ id: "AG-2611-0001", agency: "A", email: "e@x.test", listingCount: 2, stories: [] }] });
+    const list = await worker.fetch(get("public"), env);
+    const lb = await list.json() as any;
+    assert.equal(lb.agents.length, 1); assert.equal(lb.agents[0].listingCount, 2); assert.equal("email" in lb.agents[0], false);
+    assert.equal(calls[0].body.action, "agents_public");
+  } finally { globalThis.fetch = original; }
+});
+
+test("posting and profile edits need a session but no human check", async () => {
+  const original = globalThis.fetch;
+  try {
+    let calls = stub({ ok: true, httpStatus: 200, status: "posted", reference: "PS-abc" });
+    assert.equal((await worker.fetch(post("posts", { caption: "Hi" }), env)).status, 401);
+    assert.equal(calls.length, 0);
+    const ok = await worker.fetch(post("posts", { session: SESSION, kind: "story", caption: "Hi" }), env);
+    assert.equal(ok.status, 200); assert.equal((await ok.json() as any).reference, "PS-abc");
+    assert.ok(!calls.some(c => c.url.includes("siteverify")));
+    assert.equal(calls[0].body.action, "agent_post");
+    calls = stub({ ok: true, httpStatus: 200, status: "saved" });
+    assert.equal((await worker.fetch(post("profile", { session: SESSION, bio: "x" }), env)).status, 200);
+    assert.equal(calls[0].body.action, "agent_profile_save");
+  } finally { globalThis.fetch = original; }
+});
