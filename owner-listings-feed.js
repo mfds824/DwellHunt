@@ -1,5 +1,6 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
+import { createListingPage } from "./listing-page.js?v=20261117-lp1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
 const safeImage = url => typeof url === 'string' && /^https:\/\/res\.cloudinary\.com\//.test(url) ? url : '';
@@ -96,59 +97,7 @@ export function createOwnerFeed(React) {
       state.message && h('p', { className: 'dh-ol-enquiry-error', role: 'alert' }, state.message),
       h('button', { type: 'submit', className: 'dh-button', disabled: state.phase === 'sending' }, state.phase === 'sending' ? 'Sending…' : 'Send enquiry'));
   }
-  function Detail({ listing: l, onClose }) {
-    const [photo, setPhoto] = React.useState(0);
-    const dialog = React.useRef(null);
-    const photos = l.photos.map(p => safeImage(p.url)).filter(Boolean);
-    React.useEffect(() => {
-      const previous = document.activeElement; dialog.current?.focus();
-      const key = event => { if (event.key === 'Escape') onClose(); };
-      document.addEventListener('keydown', key); document.body.style.overflow = 'hidden';
-      return () => { document.removeEventListener('keydown', key); document.body.style.overflow = ''; previous?.focus?.(); };
-    }, []);
-    const rows = [
-      ['Type', CATEGORY[l.category] || 'Property'], ['Price', ownerPriceText(l)], ['Location', ownerPlace(l)],
-      l.furnishing && ['Furnishing', ({ unfurnished: 'Unfurnished', 'semi-furnished': 'Partly furnished', 'fully-furnished': 'Fully furnished' })[l.furnishing] || String(l.furnishing)],
-      l.availableFrom && ['Available from', l.availableFrom],
-      Number(l.minimumLeaseMonths) > 0 && ['Minimum lease', `${l.minimumLeaseMonths} months`],
-      Number(l.minimumNights) > 0 && ['Minimum stay', `${l.minimumNights} nights`],
-      l.advanceMonths !== undefined && l.advanceMonths !== null && l.purpose !== 'buy' && l.billingPeriod !== 'night' && ['Advance', Number(l.advanceMonths) === 0 ? 'None' : `${l.advanceMonths} months`],
-      Number(l.securityDeposit) > 0 && ['Security deposit', `${l.currency || 'LKR'} ${number(l.securityDeposit)}`],
-    ].filter(Boolean);
-    return h('div', { className: 'dh-ol-backdrop', onClick: event => { if (event.target === event.currentTarget) onClose(); } },
-      h('div', { className: 'dh-ol-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dh-ol-title', tabIndex: -1, ref: dialog },
-        h('button', { type: 'button', className: 'dh-ol-close', onClick: onClose, 'aria-label': 'Close' }, '×'),
-        photos.length > 0 && h('div', { className: 'dh-ol-gallery' },
-          h('img', { src: photos[photo], alt: `${l.title} — photo ${photo + 1} of ${photos.length}` }),
-          photos.length > 1 && h('div', { className: 'dh-ol-gallery-nav' },
-            h('button', { type: 'button', onClick: () => setPhoto((photo + photos.length - 1) % photos.length), 'aria-label': 'Previous photo' }, '‹'),
-            h('span', null, `${photo + 1} / ${photos.length}`),
-            h('button', { type: 'button', onClick: () => setPhoto((photo + 1) % photos.length), 'aria-label': 'Next photo' }, '›'))),
-        h('div', { className: 'dh-ol-body' },
-          h('p', { className: 'dh-ol-badge' }, isAgentListing(l) ? '✓ Verified agent' : '✓ Verified owner'),
-          h('h2', { id: 'dh-ol-title' }, l.title),
-          h('p', { className: 'dh-price' }, ownerPriceText(l)),
-          h('p', null, ownerPlace(l)),
-          ownerFacts(l).length > 0 && h('p', { className: 'dh-ol-facts' }, ownerFacts(l).join(' · ')),
-          isAgentListing(l) && l.agentId && h('p', null, h('button', { type: 'button', className: 'dh-ap-link', onClick: () => { location.hash = 'agent=' + l.agentId; } },
-            `View ${(l.contact && l.contact.displayName) || 'the agent'}’s profile →`)),
-          isAgentListing(l) && h(AgentEnquiry, { listing: l }),
-          h('div', { className: 'dh-card-actions' },
-            h('a', { className: isAgentListing(l) ? 'dh-text-button' : 'dh-button', href: ownerEnquiryUrl(l), target: '_blank', rel: 'noopener noreferrer' }, isAgentListing(l) ? 'Or ask DwellHunt on WhatsApp' : 'Enquire on WhatsApp'),
-            h('a', { className: 'dh-text-button', href: ownerEnquiryUrl(l, 'viewing'), target: '_blank', rel: 'noopener noreferrer' }, 'Request a viewing')),
-          h('p', { className: 'dh-ol-note' }, isAgentListing(l)
-            ? `Listed by ${(l.contact && l.contact.displayName) || 'a DwellHunt agent'}, an agent verified by DwellHunt. Enquiries sent here are emailed to the agent, and DwellHunt keeps a copy. Ref ${l.reference}.`
-            : `Listed by ${(l.contact && l.contact.displayName) || 'Private owner'}. DwellHunt verified this owner and handles every enquiry, so the owner’s contact details stay private. Ref ${l.reference}.`),
-          h('dl', { className: 'dh-ol-specs' }, rows.flatMap(([k, v]) => [h('dt', { key: k + 't' }, k), h('dd', { key: k + 'd' }, v)])),
-          isAgentListing(l)
-            ? h('details', { className: 'dh-ol-verified' }, h('summary', null, 'What does “verified agent” mean?'),
-                h('p', null, 'DwellHunt checked this agent’s details before approving their account, and reviews each of their listings before it goes live. This is not a legal title check.'))
-            : h('details', { className: 'dh-ol-verified' }, h('summary', null, 'What does “verified owner” mean?'),
-                h('p', null, 'DwellHunt spoke to the owner by phone and saw one proof of ownership, such as a utility bill, rates notice or deed page. This is not a legal title check.')),
-          h('p', { className: 'dh-ol-diligence' }, 'DwellHunt checks who is listing a property but does not guarantee title, boundaries or approvals. Before paying any money, have a lawyer check the deed and do a title search.'),
-          l.description && h('div', { className: 'dh-ol-description' }, String(l.description).split(/\n{2,}/).map((part, i) => h('p', { key: i }, part))),
-          Array.isArray(l.features) && l.features.length > 0 && h('p', null, h('strong', null, 'Features: '), l.features.join(', ')))));
-  }
+  const ListingPage = createListingPage(React, { AgentEnquiry, CATEGORY, safeImage, ownerPriceText, ownerPlace, ownerFacts, ownerEnquiryUrl, isAgentListing });
 
   return function OwnerFeed() {
     const [listings, setListings] = React.useState([]);
@@ -185,7 +134,7 @@ export function createOwnerFeed(React) {
             h('button', { type: 'button', className: 'dh-text-button', onClick: () => show(l.reference) }, 'View details'),
             isAgentListing(l) ? h('button', { type: 'button', className: 'dh-text-button', onClick: () => show(l.reference) }, 'Enquire')
               : h('a', { className: 'dh-text-button', href: ownerEnquiryUrl(l), target: '_blank', rel: 'noopener noreferrer' }, 'Enquire')))))),
-      current && h(Detail, { listing: current, onClose: () => show('') }),
+      current && h(ListingPage, { listing: current, others: listings.filter(o => o.reference !== current.reference), onClose: () => show(''), onOpen: show }),
       open && !current && h('p', { className: 'dh-results-note', role: 'status' }, 'That listing is no longer available. Browse the other owner listings above.'));
   };
 }
