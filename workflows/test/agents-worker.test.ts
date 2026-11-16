@@ -56,7 +56,7 @@ test("asking for a code needs the agent_signin human check; checking it does not
     assert.equal(r.status, 200);
     assert.ok(!calls.some(c => c.url.includes("siteverify")));
     assert.equal(body.session, SESSION);
-    assert.deepEqual(body.agent, { id: "AG-2611-0001", name: "Kamal", agency: "Lanka Homes", email: "k@example.test" });
+    assert.deepEqual(body.agent, { id: "AG-2611-0001", name: "Kamal", agency: "Lanka Homes", email: "k@example.test", phone: "+9477" });
     assert.equal("secret" in body, false);
   } finally { globalThis.fetch = original; }
 });

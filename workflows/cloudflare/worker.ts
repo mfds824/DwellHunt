@@ -47,7 +47,7 @@ export function agentSafeResponse(value: unknown) {
   if (typeof r.expires === "string") safe.expires = r.expires.slice(0, 40);
   if (r.agent && typeof r.agent === "object") {
     const a = r.agent as Record<string, unknown>;
-    safe.agent = Object.fromEntries(["id", "name", "agency", "email"].map(k => [k, String(a[k] ?? "").slice(0, 254)]));
+    safe.agent = Object.fromEntries(["id", "name", "agency", "email", "phone"].map(k => [k, String(a[k] ?? "").slice(0, 254)]));
   }
   if (Array.isArray(r.listings)) safe.listings = r.listings.slice(0, 100).map(item => {
     const l = item && typeof item === "object" ? item as Record<string, unknown> : {};

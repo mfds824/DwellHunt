@@ -158,7 +158,7 @@ function dhAgentVerify_(p) {
   const session = token(), expires = new Date(Date.now() + DH_AGENT_SESSION_DAYS * 86400000).toISOString();
   s.appendRow([now(), agent.id, 'session', hash('session|' + session), expires, 0, '']);
   found.s.getRange(found.row, dhAgentCol_('Last Sign In') + 1).setValue(now());
-  return { httpStatus: 200, status: 'signed_in', session, expires, agent: { id: agent.id, name: agent.name, agency: agent.agency, email: agent.email } };
+  return { httpStatus: 200, status: 'signed_in', session, expires, agent: { id: agent.id, name: agent.name, agency: agent.agency, email: agent.email, phone: agent.phone } };
 }
 
 /** Resolves a session token to an approved agent, or fails with SIGNED_OUT. */
@@ -183,7 +183,7 @@ function dhAgentMe_(p) {
     reference: r[oc('Reference')], title: r[oc('Title')], status: r[oc('Status')], purpose: r[oc('Purpose')], category: r[oc('Category')],
     price: r[oc('Price')], currency: r[oc('Currency')], pricePeriod: r[oc('Price Period')], city: r[oc('City')], sentAt: r[oc('Date')],
     publishedAt: r[oc('Published At')], expiresAt: r[oc('Expires At')] }));
-  return { httpStatus: 200, status: 'signed_in', agent: { id: agent.id, name: agent.name, agency: agent.agency, email: agent.email }, listings };
+  return { httpStatus: 200, status: 'signed_in', agent: { id: agent.id, name: agent.name, agency: agent.agency, email: agent.email, phone: agent.phone }, listings };
 }
 function dhAgentSignOut_(p) {
   try { const found = dhAgentSession_(p.session); found.auth.getRange(found.authRow, dhAgentAuthCol_('Used At') + 1).setValue('signed out'); } catch (e) { /* already signed out */ }
