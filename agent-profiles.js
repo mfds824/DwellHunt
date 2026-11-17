@@ -30,6 +30,17 @@ export function loadAgent(id, fetchImpl = fetch) {
     .then(r => r.ok ? r.json() : null).then(b => b && b.ok && b.agent ? b.agent : null).catch(() => null);
 }
 const price = l => Number(l.price) > 0 ? `${l.currency || 'LKR'} ${Number(l.price).toLocaleString('en-US')}${l.purpose === 'buy' ? '' : ' / month'}` : 'Price on request';
+const plural = (n, word) => `${n} ${word}${Number(n) === 1 ? '' : 's'}`;
+export function listingFacts(l) {
+  return [Number(l.bedrooms) > 0 ? plural(l.bedrooms, 'bed') : '', Number(l.bathrooms) > 0 ? plural(l.bathrooms, 'bath') : '',
+    Number(l.floorArea) > 0 ? `${Number(l.floorArea).toLocaleString('en-US')} ${l.floorUnit || 'sqft'}` : ''].filter(Boolean).join(' · ');
+}
+export function listingPlace(l) { const x = l.location || {}; return [x.building, x.city || x.district].filter(Boolean).join(', '); }
+/** The listing a profile was opened from (its "#owner-listing=…" address), so the visitor can go back to it. */
+export function listingFromUrl(url) {
+  const m = /#owner-listing=([A-Z]{2}-\d{4}-\d{4})$/.exec(decodeURIComponent(String(url || '')));
+  return m ? m[1] : '';
+}
 
 export function createAgentProfiles(React) {
   const h = React.createElement;
@@ -74,7 +85,7 @@ export function createAgentProfiles(React) {
     if (state.phase === 'done') return h('div', { className: 'dh-ap-contact', role: 'status' }, h('strong', null, 'Message sent'), h('p', null, `${agent.agency} will contact you soon. We’ve emailed you a confirmation.`));
     return h('form', { className: 'dh-ap-contact', onSubmit: submit, noValidate: true },
       h('h3', null, `Contact ${agent.agency}`),
-      h('div', { className: 'dh-ap-row' }, h('label', null, 'Your name', h('input', { value: f.name, onChange: set('name'), autoComplete: 'name' })),
+      h('div', { className: 'dh-ap-row' }, h('label', null, 'Your name', h('input', { value: f.name, onChange: set('name'), autoComplete: 'name', autoFocus: true })),
         h('label', null, 'Email', h('input', { type: 'email', value: f.email, onChange: set('email'), autoComplete: 'email' }))),
       h('label', null, 'Phone / WhatsApp (optional)', h('input', { type: 'tel', value: f.phone, onChange: set('phone'), autoComplete: 'tel' })),
       h('label', null, 'Message', h('textarea', { rows: 3, value: f.message, onChange: set('message'), placeholder: 'What are you looking for?' })),
@@ -85,12 +96,37 @@ export function createAgentProfiles(React) {
       h('button', { type: 'submit', className: 'dh-button', disabled: state.phase === 'sending' }, state.phase === 'sending' ? 'Sending…' : 'Send message'));
   }
 
+  /** The profile reads as a profile first; the message form opens only when the visitor asks for it. */
+  function ContactPanel({ agent }) {
+    const [open, setOpen] = React.useState(false);
+    if (open) return h(Contact, { agent });
+    return h('div', { className: 'dh-ap-cta' },
+      h('button', { type: 'button', className: 'dh-button', onClick: () => setOpen(true) }, `Contact ${agent.agency}`),
+      h('p', { className: 'dh-ap-muted' }, `Your message goes to ${agent.agency} through DwellHunt.`));
+  }
+
+  function ListingCard({ listing: l, onOpen }) {
+    const photo = safeImage(l.photos && l.photos[0] && l.photos[0].url);
+    const facts = listingFacts(l), place = listingPlace(l);
+    return h('button', { type: 'button', className: 'dh-ap-card', onClick: () => onOpen(l.reference) },
+      photo ? h('img', { src: photo, alt: '', loading: 'lazy' }) : h('span', { className: 'dh-ap-card-nophoto', 'aria-hidden': 'true' }),
+      h('span', { className: 'dh-ap-card-body' },
+        h('strong', null, l.title),
+        h('span', { className: 'dh-ap-card-price' }, price(l)),
+        facts && h('span', null, facts),
+        place && h('span', { className: 'dh-ap-card-place' }, place)));
+  }
+
   /** Full profile page shown over the homepage when the address ends in #agent=AG-…. */
   function AgentProfileOverlay() {
     const [id, setId] = React.useState(() => agentFromHash(location.hash));
     const [agent, setAgent] = React.useState(null);
     const [state, setState] = React.useState('idle');
-    React.useEffect(() => { const sync = () => setId(agentFromHash(location.hash)); window.addEventListener('hashchange', sync); return () => window.removeEventListener('hashchange', sync); }, []);
+    const [from, setFrom] = React.useState('');
+    React.useEffect(() => {
+      const sync = e => { const next = agentFromHash(location.hash); if (next) setFrom(listingFromUrl(e && e.oldURL)); setId(next); };
+      window.addEventListener('hashchange', sync); return () => window.removeEventListener('hashchange', sync);
+    }, []);
     React.useEffect(() => {
       if (!id) { setAgent(null); return; }
       let live = true; setState('loading');
@@ -99,11 +135,13 @@ export function createAgentProfiles(React) {
       return () => { live = false; document.body.style.overflow = ''; };
     }, [id]);
     if (!id) return null;
-    const close = () => history.replaceState(null, '', location.pathname + location.search) || setId('');
     const openListing = ref => { location.hash = 'owner-listing=' + ref; };
+    // Opened from a listing: closing goes back to that listing instead of dropping the visitor on the homepage.
+    const close = () => { if (from) { setFrom(''); openListing(from); return; } history.replaceState(null, '', location.pathname + location.search); setId(''); };
     return h('div', { className: 'dh-ap-backdrop dh-ap-page-backdrop', onClick: e => { if (e.target === e.currentTarget) close(); } },
       h('div', { className: 'dh-ap-page', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dh-ap-name' },
-        h('button', { type: 'button', className: 'dh-ap-close', onClick: close, 'aria-label': 'Close' }, '×'),
+        h('button', { type: 'button', className: 'dh-ap-close', onClick: close, 'aria-label': from ? 'Close and go back to the listing' : 'Close' }, '×'),
+        from && h('button', { type: 'button', className: 'dh-ap-back', onClick: close }, '← Back to listing'),
         state === 'loading' && h('p', { role: 'status' }, 'Loading profile…'),
         state === 'missing' && h('p', { role: 'status' }, 'This agent profile is not available.'),
         agent && h(React.Fragment, null,
@@ -113,15 +151,14 @@ export function createAgentProfiles(React) {
               agent.areas && agent.areas.length > 0 && h('p', { className: 'dh-ap-areas' }, agent.areas.join(' · ')))),
           agent.bio && h('p', { className: 'dh-ap-bio' }, agent.bio),
           h('div', { className: 'dh-ap-section' }, h('h3', null, `Live listings (${(agent.listings || []).length})`),
-            (agent.listings || []).length ? h('ul', { className: 'dh-ap-listings' }, agent.listings.map(l => h('li', { key: l.reference },
-              h('button', { type: 'button', className: 'dh-ap-link', onClick: () => openListing(l.reference) }, l.title), h('span', null, price(l)))))
+            (agent.listings || []).length ? h('div', { className: 'dh-ap-cards' }, agent.listings.map(l => h(ListingCard, { key: l.reference, listing: l, onOpen: openListing })))
               : h('p', { className: 'dh-ap-muted' }, 'No live listings right now.')),
           agent.posts && agent.posts.length > 0 && h('div', { className: 'dh-ap-section' }, h('h3', null, 'Posts'),
             h('div', { className: 'dh-ap-posts' }, agent.posts.map(p => h('article', { key: p.id, className: 'dh-ap-post' },
               safeImage(p.photo) && h('img', { src: p.photo, alt: '', loading: 'lazy' }),
               p.caption && h('p', null, p.caption),
               h('small', null, timeAgo(p.at), p.listingRef ? ' · ' : '', p.listingRef ? h('button', { type: 'button', className: 'dh-ap-link', onClick: () => openListing(p.listingRef) }, 'See listing') : null))))),
-          h(Contact, { agent }))));
+          h(ContactPanel, { agent }))));
   }
   return { AgentStrip, AgentProfileOverlay };
 }

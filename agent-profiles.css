@@ -40,3 +40,14 @@
 .dh-ap-consent input { margin-top: 3px; accent-color: #064e3b; }
 .dh-ap-error { color: #b91c1c; font-size: 13px; margin: 0; }
 .dh-ap-contact .dh-button { justify-self: start; }
+.dh-ap-back { justify-self: start; background: none; border: 0; padding: 0; color: #064e3b; font: inherit; font-weight: 800; font-size: 14px; cursor: pointer; }
+.dh-ap-back:hover { text-decoration: underline; }
+.dh-ap-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.dh-ap-card { display: grid; grid-template-rows: auto 1fr; text-align: left; padding: 0; border: 1px solid #e7e5e4; border-radius: 16px; overflow: hidden; background: #fff; cursor: pointer; font: inherit; color: #1c2b24; transition: box-shadow .15s, border-color .15s; }
+.dh-ap-card:hover, .dh-ap-card:focus-visible { border-color: #9cc2ad; box-shadow: 0 8px 24px rgba(6, 46, 34, 0.12); }
+.dh-ap-card img, .dh-ap-card-nophoto { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #eef3ef; }
+.dh-ap-card-body { display: grid; gap: 4px; padding: 12px 14px 14px; font-size: 13px; color: #50665a; }
+.dh-ap-card-body strong { font-size: 15px; line-height: 1.35; color: #1c2b24; }
+.dh-ap-card-price { font-weight: 900; font-size: 15px; color: #064e3b; }
+.dh-ap-card-place { color: #78716c; }
+.dh-ap-cta { display: grid; gap: 8px; justify-items: start; padding-top: 4px; border-top: 1px solid #eef1ee; padding: 16px 0 0; }
