@@ -1,6 +1,6 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
-import { createListingPage } from "./listing-page.js?v=20261117-ax1";
+import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261118-rp1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
 const safeImage = url => typeof url === 'string' && /^https:\/\/res\.cloudinary\.com\//.test(url) ? url : '';
@@ -125,6 +125,8 @@ export function createOwnerFeed(React) {
           h('h3', null, h('button', { type: 'button', className: 'dh-title-link', onClick: () => show(l.reference) }, l.title)),
           h('p', null, ownerPlace(l)),
           h('p', { className: 'dh-price' }, ownerPriceText(l)),
+          l.purpose === 'buy' && (l.currency || 'LKR') === 'LKR' && Number(l.price) > 0 &&
+            h('p', { className: 'dh-monthly-estimate' }, `≈ LKR ${Math.round(monthlyPayment(Number(l.price) * 0.8, 12, 20)).toLocaleString('en-US')} / month with a home loan`),
           ownerFacts(l).length > 0 && h('p', null, ownerFacts(l).join(' · ')),
           isAgentListing(l) && l.agentId
             ? h('p', { className: 'dh-agency' }, 'Listed by ', h('button', { type: 'button', className: 'dh-ap-link', onClick: () => { location.hash = 'agent=' + l.agentId; } },

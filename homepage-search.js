@@ -11,8 +11,33 @@ export const RENT_BUDGETS = [
   { id: '250to500', label: '250–500k', min: '250', max: '500' },
   { id: '500plus', label: '500k+', min: '500', max: '' },
 ];
-export const budgetPresets = purpose => purpose === 'rent' ? RENT_BUDGETS : SALE_BUDGETS;
-export const budgetScale = purpose => purpose === 'rent' ? 1000 : 1000000;
+// "Monthly payment" budgets for sale searches, in LKR thousands a month, using the listing page's loan estimate.
+export const MONTHLY_BUDGETS = [
+  { id: 'under100m', label: 'Under 100k / mo', min: '', max: '100' },
+  { id: '100to200m', label: '100–200k / mo', min: '100', max: '200' },
+  { id: '200to400m', label: '200–400k / mo', min: '200', max: '400' },
+  { id: '400plusm', label: '400k+ / mo', min: '400', max: '' },
+];
+export const HOME_LOAN = { downPct: 20, ratePct: 12, years: 20 };
+/** Monthly instalment for buying at `price` with HOME_LOAN (standard amortising formula). */
+export function monthlyForPrice(price, loan = HOME_LOAN) {
+  const p = Number(price) * (1 - loan.downPct / 100), r = loan.ratePct / 1200, n = loan.years * 12;
+  if (!(p > 0)) return 0;
+  if (r === 0) return p / n;
+  const f = Math.pow(1 + r, n);
+  return (p * r * f) / (f - 1);
+}
+/** The price whose HOME_LOAN instalment is `payment` a month (inverse of monthlyForPrice). */
+export function priceForMonthly(payment, loan = HOME_LOAN) {
+  const m = Number(payment), r = loan.ratePct / 1200, n = loan.years * 12;
+  if (!(m > 0)) return 0;
+  const borrow = r === 0 ? m * n : m * (1 - Math.pow(1 + r, -n)) / r;
+  return borrow / (1 - loan.downPct / 100);
+}
+/** Which budget the search uses: 'rent', 'buy' (total price) or 'monthly' (sale, by monthly loan payment). */
+export const budgetKind = (purpose, mode) => purpose === 'buy' && mode === 'monthly' ? 'monthly' : purpose;
+export const budgetPresets = kind => kind === 'rent' ? RENT_BUDGETS : kind === 'monthly' ? MONTHLY_BUDGETS : SALE_BUDGETS;
+export const budgetScale = kind => kind === 'rent' || kind === 'monthly' ? 1000 : 1000000;
 export const budgetValue = (value, purpose) => value === '' ? null : Number(value) * budgetScale(purpose);
 export function budgetError(minimum, maximum, purpose) {
   const min = budgetValue(minimum, purpose), max = budgetValue(maximum, purpose);
@@ -26,7 +51,12 @@ export function selectedBudgetPreset(minimum, maximum, purpose) {
 }
 export function budgetSummary(minimum, maximum, purpose) {
   const number = value => Number(value).toLocaleString('en-US', { maximumFractionDigits: 8 });
-  const amount = value => purpose === 'rent' ? `LKR ${number(Number(value) * 1000)}` : `LKR ${number(value)} million`;
+  const amount = value => purpose === 'rent' || purpose === 'monthly' ? `LKR ${number(Number(value) * 1000)}` : `LKR ${number(value)} million`;
+  if (purpose === 'monthly') {
+    const price = value => `LKR ${(priceForMonthly(Number(value) * 1000) / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 })}M`;
+    const range = `${minimum === '' ? 'Any' : price(minimum)} – ${maximum === '' ? 'no maximum' : price(maximum)}`;
+    return `${minimum === '' ? 'Any minimum' : amount(minimum)} – ${maximum === '' ? 'No maximum' : amount(maximum)} / month · about ${range} price`;
+  }
   return `${minimum === '' ? 'Any minimum' : amount(minimum)} – ${maximum === '' ? 'No maximum' : amount(maximum)}${purpose === 'rent' ? ' / month' : ''}`;
 }
 export function rentalPeriod(p) {
@@ -72,12 +102,14 @@ export function matchesLocation(p, query, cities = []) {
   return text.includes(q) || (!!area && text.includes(normalizeLocation(area.zone)));
 }
 export function filterHomeListings(properties, filters, isSaved = () => false) {
-  if (budgetError(filters.minPrice, filters.maxPrice, filters.purpose)) return [];
-  const min = budgetValue(filters.minPrice, filters.purpose), max = budgetValue(filters.maxPrice, filters.purpose);
-  const under = selectedBudgetPreset(filters.minPrice, filters.maxPrice, filters.purpose).startsWith('under');
+  const kind = budgetKind(filters.purpose, filters.budgetMode);
+  if (budgetError(filters.minPrice, filters.maxPrice, kind)) return [];
+  const min = budgetValue(filters.minPrice, kind), max = budgetValue(filters.maxPrice, kind);
+  const under = selectedBudgetPreset(filters.minPrice, filters.maxPrice, kind).startsWith('under');
   const cities = [...new Set(properties.map(p => p.city).filter(Boolean))];
   return properties.filter(p => {
-    const price = comparisonPriceLKR(p);
+    const lkr = comparisonPriceLKR(p);
+    const price = kind === 'monthly' && lkr !== null ? monthlyForPrice(lkr) : lkr;
     return p.purpose === filters.purpose &&
       (filters.category === 'all' || p.category === filters.category) &&
       (!filters.savedOnly || isSaved(p.id)) && matchesLocation(p, filters.location, cities) &&

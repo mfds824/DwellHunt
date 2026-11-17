@@ -15,6 +15,13 @@ const number = value => Number(value).toLocaleString('en-US');
 const yesNo = value => value === true || value === 'yes' ? 'Yes' : value === false || value === 'no' ? 'No' : '';
 const titleCase = text => String(text || '').replace(/(^|[\s,(/-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
 const words = list => (Array.isArray(list) ? list : []).map(item => titleCase(String(item).replace(/-/g, ' '))).filter(Boolean);
+/** The most useful guide for this listing (guides/ on the same site). */
+export function guideFor(l) {
+  if (l.category === 'annex') return l.purpose === 'buy' ? ['buying-an-annex-sri-lanka', 'Buying an annex: deed, land share and approvals']
+    : ['renting-an-annex-colombo', 'Renting an annex: 10 things to check'];
+  if (l.purpose !== 'buy') return ['rent-advance-and-deposit-sri-lanka', 'Rent advance and security deposit, explained'];
+  return l.category === 'apartment' ? ['freehold-vs-leasehold-apartments', 'Freehold vs leasehold apartments'] : ['certificate-of-conformity', 'What is a Certificate of Conformity (CoC)?'];
+}
 export function ordinal(n) {
   const v = Math.abs(Math.trunc(Number(n))); const s = v % 100 >= 11 && v % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][v % 10] || 'th';
   return v + s;
@@ -98,8 +105,58 @@ export function factGroups(l, category = {}) {
   return groups.map(([title, rows]) => [title, rows.filter(([, v]) => v)]).filter(([, rows]) => rows.length);
 }
 
+export const REPORT_REASONS = [['unavailable', 'Already rented or sold'], ['price', 'Wrong price'], ['photos', 'Photos are not of this property'],
+  ['fake', 'Looks fake or a scam'], ['details', 'Wrong details or location'], ['other', 'Something else']];
+/** Checks a report before it is sent. Returns an error message, or '' when it is ready. */
+export function reportProblem(f) {
+  if (!REPORT_REASONS.some(([id]) => id === f.reason)) return 'Choose what is wrong with this listing.';
+  if (f.reason === 'other' && !String(f.note || '').trim()) return 'Tell us briefly what is wrong.';
+  if (String(f.note || '').length > 500) return 'Please keep the note under 500 characters.';
+  return '';
+}
+
 export function createListingPage(React, d) {
   const h = React.createElement;
+
+  /** Anonymous "Report this listing". lead-turnstile.js adds the human check when this posts to listingReportUrl. */
+  function ReportListing({ listing: l }) {
+    const [open, setOpen] = React.useState(false);
+    const [f, setF] = React.useState({ reason: '', note: '' });
+    const [state, setState] = React.useState({ phase: 'idle', message: '' });
+    const honeypot = React.useRef(null);
+    if (!open) return h('button', { type: 'button', className: 'dh-lp-report-link', onClick: () => setOpen(true) }, '🚩 Report this listing');
+    if (state.phase === 'done') return h('div', { className: 'dh-lp-report', role: 'status' }, h('strong', null, 'Thank you, report sent'),
+      h('p', null, 'DwellHunt will check this listing with the lister. We don’t share who reported it.'));
+    const submit = async e => {
+      e.preventDefault();
+      if (honeypot.current && honeypot.current.value) { setState({ phase: 'done', message: '' }); return; }
+      const problem = reportProblem(f);
+      if (problem) { setState({ phase: 'error', message: problem }); return; }
+      const url = (window.DWELLHUNT_VIEWING || {}).listingReportUrl;
+      if (!url) { setState({ phase: 'error', message: 'Reports are not available right now. Please tell us on WhatsApp.' }); return; }
+      setState({ phase: 'sending', message: '' });
+      try {
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reference: l.reference, reason: f.reason, note: f.note.trim() }) });
+        if (r.status === 404) { setState({ phase: 'error', message: 'This listing is no longer live, so it can’t be reported.' }); return; }
+        if (!r.ok) throw new Error('send');
+        setState({ phase: 'done', message: '' });
+      } catch { setState({ phase: 'error', message: 'Your report could not be sent. Please try again.' }); }
+    };
+    return h('form', { className: 'dh-lp-report', onSubmit: submit, noValidate: true, 'aria-labelledby': 'dh-lp-report-title' },
+      h('h3', { id: 'dh-lp-report-title' }, 'Report this listing'),
+      h('p', null, 'Tell DwellHunt if something looks wrong. Reports are anonymous.'),
+      h('fieldset', null, h('legend', null, 'What’s wrong?'),
+        REPORT_REASONS.map(([id, label]) => h('label', { key: id, className: 'dh-lp-report-option' },
+          h('input', { type: 'radio', name: 'dh-lp-report-reason', value: id, checked: f.reason === id, onChange: () => setF(o => ({ ...o, reason: id })) }), label))),
+      h('label', { className: 'dh-lp-report-note' }, f.reason === 'other' ? 'What’s wrong?' : 'Anything else? (optional)',
+        h('textarea', { rows: 3, maxLength: 500, value: f.note, onChange: e => setF(o => ({ ...o, note: e.target.value })) })),
+      h('div', { className: 'dh-hp', 'aria-hidden': 'true' }, h('label', null, 'Leave empty', h('input', { ref: honeypot, type: 'text', tabIndex: -1, autoComplete: 'off', defaultValue: '' }))),
+      state.message && h('p', { className: 'dh-ol-enquiry-error', role: 'alert' }, state.message),
+      h('div', { className: 'dh-lp-report-actions' },
+        h('button', { type: 'submit', className: 'dh-button', disabled: state.phase === 'sending' }, state.phase === 'sending' ? 'Sending…' : 'Send report'),
+        h('button', { type: 'button', className: 'dh-text-button', onClick: () => { setOpen(false); setState({ phase: 'idle', message: '' }); } }, 'Cancel')));
+  }
   const money = (l, v) => `${l.currency || 'LKR'} ${number(Math.round(v))}`;
 
   function Lightbox({ photos, start, title, onClose }) {
@@ -265,7 +322,9 @@ export function createListingPage(React, d) {
                 h('p', null, agent ? 'DwellHunt checked this agent’s details before approving their account, and reviews each of their listings before it goes live. This is not a legal title check.'
                   : 'DwellHunt spoke to the owner by phone and saw one proof of ownership, such as a utility bill, rates notice or deed page. This is not a legal title check.')),
               h('p', { className: 'dh-ol-diligence' }, 'DwellHunt checks who is listing a property but does not guarantee title, boundaries or approvals. Before paying any money, have a lawyer check the deed and do a title search.'),
-              h('p', { className: 'dh-lp-fine' }, [listedAgo(l.publishedAt), `Ref ${l.reference}`].filter(Boolean).join(' · '))),
+              h('p', { className: 'dh-lp-guide' }, 'Guide: ', h('a', { href: './guides/' + guideFor(l)[0] + '.html' }, guideFor(l)[1] + ' →')),
+              h('p', { className: 'dh-lp-fine' }, [listedAgo(l.publishedAt), `Ref ${l.reference}`].filter(Boolean).join(' · ')),
+              h(ReportListing, { key: l.reference, listing: l })),
 
             others.length > 0 && h('section', { className: 'dh-lp-section' },
               h('h2', null, 'More verified listings'),

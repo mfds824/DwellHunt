@@ -1,5 +1,5 @@
-import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings, locationSuggestions, locationQuery } from "./homepage-search.js?v=20261115-loc1";
-import { createOwnerFeed } from "./owner-listings-feed.js?v=20261117-ax1";
+import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings, locationSuggestions, locationQuery, budgetKind, priceForMonthly, monthlyForPrice, comparisonPriceLKR } from "./homepage-search.js?v=20261118-mp1";
+import { createOwnerFeed } from "./owner-listings-feed.js?v=20261118-rp1";
 import { createAgentProfiles } from "./agent-profiles.js?v=20261117-ns1";
 // Homepage presentation only. Marketplace state, routes and integrations remain in app.js.
 export function createHomepage(
@@ -185,6 +185,8 @@ export function createHomepage(
           p.isNegotiable &&
             h("span", { className: "dh-negotiable" }, "Negotiable"),
         ),
+        p.purpose === "buy" && comparisonPriceLKR(p) > 0 &&
+          h("p", { className: "dh-monthly-estimate" }, `≈ LKR ${Math.round(monthlyForPrice(comparisonPriceLKR(p))).toLocaleString("en-US")} / month with a home loan`),
         h(
           "h3",
           null,
@@ -295,6 +297,8 @@ export function createHomepage(
     const [location, setLocation] = React.useState("");
     const [minPrice, setMinPrice] = React.useState("");
     const [maxPrice, setMaxPrice] = React.useState("");
+    const [budgetMode, setBudgetMode] = React.useState("total");
+    const kind = budgetKind(purpose, budgetMode);
     const [bedrooms, setBedrooms] = React.useState("any");
     const [category, setCategory] = React.useState("apartment");
     const [sortBy, setSortBy] = React.useState("newest");
@@ -303,17 +307,19 @@ export function createHomepage(
     const types = ["all", ...Object.keys(labels)];
     const available = inventory.filter((p) => p.purpose === purpose);
     const cities = [...new Set(available.map((p) => p.city))].sort();
-    const budgetProblem = budgetError(minPrice, maxPrice, purpose);
-    const activePreset = selectedBudgetPreset(minPrice, maxPrice, purpose);
+    const budgetProblem = budgetError(minPrice, maxPrice, kind);
+    const activePreset = selectedBudgetPreset(minPrice, maxPrice, kind);
     const shown = sortHomeListings(filterHomeListings(inventory, {
-      purpose, category, location, minPrice, maxPrice, bedrooms, savedOnly,
+      purpose, budgetMode, category, location, minPrice, maxPrice, bedrooms, savedOnly,
     }, store.isPropertySaved), sortBy);
+    // The advanced search filters by total price, so a monthly budget is converted to the matching price range.
+    const totalBudget = value => { const v = budgetValue(value, kind); return v === null || kind !== "monthly" ? v : Math.round(priceForMonthly(v)); };
     const search = (event, advanced = false) => {
       event.preventDefault();
       if (budgetProblem) return;
       store.setFilters({
         ...defaults, purpose, location: locationQuery(location),
-        minPrice: budgetValue(minPrice, purpose), maxPrice: budgetValue(maxPrice, purpose),
+        minPrice: totalBudget(minPrice), maxPrice: totalBudget(maxPrice),
         bedrooms, category, sortBy,
       });
       if (advanced) go(store, "search");
@@ -485,23 +491,27 @@ export function createHomepage(
               ),
             ),
             h("fieldset", { className: "dh-price-range", "aria-describedby": budgetProblem ? "dh-budget-error" : "dh-budget-summary" },
-              h("legend", null, purpose === "rent" ? "Your budget · LKR thousands / month" : "Your budget · LKR millions"),
+              h("legend", null, kind === "rent" ? "Your budget · LKR thousands / month" : kind === "monthly" ? "Your monthly payment · LKR thousands / month" : "Your budget · LKR millions"),
+              purpose === "buy" && h("div", { className: "dh-budget-mode", role: "group", "aria-label": "Budget type" },
+                [["total", "Total budget"], ["monthly", "Monthly payment"]].map(([mode, label]) => button(label, () => { setBudgetMode(mode); setMinPrice(""); setMaxPrice(""); },
+                  "dh-budget-mode-button", { key: mode, "aria-pressed": budgetMode === mode }))),
               h("div", { className: "dh-budget-presets", role: "group", "aria-label": "Budget presets" },
-                budgetPresets(purpose).map(preset => button(preset.label, () => { setMinPrice(preset.min); setMaxPrice(preset.max); }, "dh-property-tab", {
+                budgetPresets(kind).map(preset => button(preset.label, () => { setMinPrice(preset.min); setMaxPrice(preset.max); }, "dh-property-tab", {
                   key: preset.id, "aria-pressed": activePreset === preset.id,
                 }))),
               h("div", { className: "dh-price-summary" },
-                h("output", { id: "dh-budget-summary", "aria-live": "polite", "aria-atomic": true }, budgetSummary(minPrice, maxPrice, purpose)),
+                h("output", { id: "dh-budget-summary", "aria-live": "polite", "aria-atomic": true }, budgetSummary(minPrice, maxPrice, kind)),
                 button("Reset", () => { setMinPrice(""); setMaxPrice(""); }, "dh-price-reset", { "aria-label": "Reset budget" })),
               h("div", { className: "dh-price-controls" },
-                h("div", null, h("label", { htmlFor: "dh-min-price" }, purpose === "rent" ? "Minimum (thousands / month)" : "Minimum (millions)"),
+                h("div", null, h("label", { htmlFor: "dh-min-price" }, kind === "rent" || kind === "monthly" ? "Minimum (thousands / month)" : "Minimum (millions)"),
                   h("input", { id: "dh-min-price", type: "number", min: 0, step: "any", inputMode: "decimal", value: minPrice, placeholder: "Any minimum",
                     "aria-invalid": !!budgetProblem, "aria-describedby": budgetProblem ? "dh-budget-error" : "dh-budget-summary", onChange: e => setMinPrice(e.target.value) })),
-                h("div", null, h("label", { htmlFor: "dh-max-price" }, purpose === "rent" ? "Maximum (thousands / month)" : "Maximum (millions)"),
+                h("div", null, h("label", { htmlFor: "dh-max-price" }, kind === "rent" || kind === "monthly" ? "Maximum (thousands / month)" : "Maximum (millions)"),
                   h("input", { id: "dh-max-price", type: "number", min: 0, step: "any", inputMode: "decimal", value: maxPrice, placeholder: "No maximum",
                     "aria-invalid": !!budgetProblem, "aria-describedby": budgetProblem ? "dh-budget-error" : "dh-budget-summary", onChange: e => setMaxPrice(e.target.value) }))),
               budgetProblem ? h("p", { id: "dh-budget-error", className: "dh-budget-error", role: "alert" }, budgetProblem) :
                 h("p", { className: "dh-budget-count", role: "status", "aria-live": "polite" }, `${shown.length} matching listing${shown.length === 1 ? "" : "s"}${purpose === "rent" ? " · monthly price comparison" : ""}`),
+              kind === "monthly" && h("p", { className: "dh-search-note" }, "Estimated home-loan payment with 20% down, 12% interest over 20 years. A rough guide, not a loan offer."),
               h("p", { className: "dh-search-note" }, "Leave either field empty for no limit. “Under” excludes its upper limit; other ranges include both limits.")),
             h(
               "button",
@@ -701,6 +711,7 @@ export function createHomepage(
       h("strong", null, "DwellHunt"),
       h("span", null, "A Higher Way Home."),
       h("span", null, "Thoughtful property search for Sri Lanka"),
+      h("a", { href: "./guides/", className: "dh-footer-link" }, "Renting & buying guides"),
       h("a", { href: "./privacy.html", className: "dh-footer-link" }, "Privacy Policy"),
       h("small", { className: "dh-footer-note" }, "DwellHunt checks who is listing a property but does not guarantee title, boundaries or approvals. Before paying any money, have a lawyer check the deed and do a title search."),
     );

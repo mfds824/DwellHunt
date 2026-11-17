@@ -34,3 +34,9 @@
 .dh-ol-enquiry-error { color: #b91c1c; font-size: 13px; margin: 0; }
 .dh-ol-enquiry-done p { margin: 4px 0 0; color: #3f5148; font-size: 14px; }
 .dh-ol-enquiry .dh-button { justify-self: start; }
+
+/* Monthly-payment budget switch (homepage search) and the loan estimate line on sale cards. */
+.dh-budget-mode { display: inline-flex; gap: 4px; padding: 4px; margin: 4px 0 10px; border-radius: 999px; background: #eef3ef; }
+.dh-budget-mode-button { border: 0; background: none; border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 800; color: #3f5148; cursor: pointer; min-height: 36px; }
+.dh-budget-mode-button[aria-pressed="true"] { background: #064e3b; color: #fff; }
+.dh-monthly-estimate { margin: 2px 0 0; font-size: 12px; font-weight: 700; color: #047857; }
