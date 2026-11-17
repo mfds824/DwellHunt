@@ -1,4 +1,4 @@
-/* Public agent profiles, posts and 24-hour stories (homepage strip + "#agent=AG-…" profile page).
+/* Public agent profiles and posts (homepage "Verified agents" strip + "#agent=AG-…" profile page).
  * Data comes from the Worker's read-only /agents/public routes; agent email and phone are never public.
  * "Contact" sends a DwellHunt lead (lead-turnstile.js adds the human check) that the backend emails to the agent. */
 const isAgentId = id => /^AG-\d{4}-\d{4}$/.test(String(id || ''));
@@ -37,40 +37,16 @@ export function createAgentProfiles(React) {
   const avatar = (a, size = 'md') => h('span', { className: `dh-ap-avatar dh-ap-avatar-${size}`, 'aria-hidden': 'true' },
     safeImage(a.logo) ? h('img', { src: a.logo, alt: '' }) : initials(a.agency || a.name));
 
-  function StoryViewer({ agent, start = 0, onClose }) {
-    const [i, setI] = React.useState(start);
-    const s = agent.stories[i];
-    React.useEffect(() => { const k = e => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', k); return () => document.removeEventListener('keydown', k); }, []);
-    if (!s) return null;
-    return h('div', { className: 'dh-ap-backdrop', onClick: e => { if (e.target === e.currentTarget) onClose(); } },
-      h('div', { className: 'dh-ap-story', role: 'dialog', 'aria-modal': 'true', 'aria-label': `Story from ${agent.agency}` },
-        h('div', { className: 'dh-ap-story-bars' }, agent.stories.map((_, n) => h('span', { key: n, className: n <= i ? 'is-seen' : '' }))),
-        h('div', { className: 'dh-ap-story-head' }, avatar(agent, 'sm'), h('strong', null, agent.agency), h('small', null, timeAgo(s.at)),
-          h('button', { type: 'button', className: 'dh-ap-close', onClick: onClose, 'aria-label': 'Close' }, '×')),
-        safeImage(s.photo) && h('img', { className: 'dh-ap-story-photo', src: s.photo, alt: s.caption || 'Story photo' }),
-        s.caption && h('p', { className: 'dh-ap-story-caption' }, s.caption),
-        h('div', { className: 'dh-ap-story-nav' },
-          h('button', { type: 'button', disabled: i === 0, onClick: () => setI(i - 1) }, '‹ Previous'),
-          h('button', { type: 'button', className: 'dh-ap-link', onClick: () => { onClose(); openAgent(agent.id); } }, 'View profile'),
-          h('button', { type: 'button', disabled: i >= agent.stories.length - 1, onClick: () => setI(i + 1) }, 'Next ›'))));
-  }
-
-  /** "Latest from agents": agents with live stories first (ringed), then other verified agents with listings. */
-  function AgentStories() {
+  /** "Verified agents": agents with live listings; each opens that agent's profile. */
+  function AgentStrip() {
     const [agents, setAgents] = React.useState([]);
-    const [viewing, setViewing] = React.useState(null);
     React.useEffect(() => { let live = true; loadAgents().then(list => { if (live) setAgents(list); }); return () => { live = false; }; }, []);
-    const shown = [...agents.filter(a => a.stories && a.stories.length), ...agents.filter(a => !(a.stories && a.stories.length) && a.listingCount > 0)].slice(0, 20);
+    const shown = agents.filter(a => a.listingCount > 0).slice(0, 20);
     if (!shown.length) return null;
     return h('section', { className: 'dh-section dh-ap-strip', 'aria-labelledby': 'dh-ap-strip-title' },
-      h('div', { className: 'dh-ap-strip-head' }, h('p', { className: 'dh-eyebrow' }, 'Verified agents'), h('h2', { id: 'dh-ap-strip-title' }, 'Latest from agents')),
-      h('div', { className: 'dh-ap-strip-row' }, shown.map(a => {
-        const hasStory = a.stories && a.stories.length;
-        return h('button', { key: a.id, type: 'button', className: 'dh-ap-strip-item' + (hasStory ? ' has-story' : ''),
-          onClick: () => hasStory ? setViewing(a) : openAgent(a.id), 'aria-label': hasStory ? `View stories from ${a.agency}` : `View ${a.agency}’s profile` },
-          avatar(a), h('span', null, a.agency));
-      })),
-      viewing && h(StoryViewer, { agent: viewing, onClose: () => setViewing(null) }));
+      h('div', { className: 'dh-ap-strip-head' }, h('p', { className: 'dh-eyebrow' }, 'Verified agents'), h('h2', { id: 'dh-ap-strip-title' }, 'Agents on DwellHunt')),
+      h('div', { className: 'dh-ap-strip-row' }, shown.map(a => h('button', { key: a.id, type: 'button', className: 'dh-ap-strip-item',
+        onClick: () => openAgent(a.id), 'aria-label': `View ${a.agency}’s profile` }, avatar(a), h('span', null, a.agency)))));
   }
 
   function Contact({ agent }) {
@@ -114,7 +90,6 @@ export function createAgentProfiles(React) {
     const [id, setId] = React.useState(() => agentFromHash(location.hash));
     const [agent, setAgent] = React.useState(null);
     const [state, setState] = React.useState('idle');
-    const [story, setStory] = React.useState(null);
     React.useEffect(() => { const sync = () => setId(agentFromHash(location.hash)); window.addEventListener('hashchange', sync); return () => window.removeEventListener('hashchange', sync); }, []);
     React.useEffect(() => {
       if (!id) { setAgent(null); return; }
@@ -137,9 +112,6 @@ export function createAgentProfiles(React) {
               h('p', { className: 'dh-ap-verified' }, '✓ Verified agent', agent.name ? ` · ${agent.name}` : ''),
               agent.areas && agent.areas.length > 0 && h('p', { className: 'dh-ap-areas' }, agent.areas.join(' · ')))),
           agent.bio && h('p', { className: 'dh-ap-bio' }, agent.bio),
-          agent.stories && agent.stories.length > 0 && h('div', { className: 'dh-ap-section' }, h('h3', null, 'Stories · last 24 hours'),
-            h('div', { className: 'dh-ap-stories' }, agent.stories.map((s, n) => h('button', { key: s.id, type: 'button', className: 'dh-ap-story-thumb', onClick: () => setStory(n), 'aria-label': 'Open story' },
-              safeImage(s.photo) ? h('img', { src: s.photo, alt: '' }) : h('span', null, '•'))))),
           h('div', { className: 'dh-ap-section' }, h('h3', null, `Live listings (${(agent.listings || []).length})`),
             (agent.listings || []).length ? h('ul', { className: 'dh-ap-listings' }, agent.listings.map(l => h('li', { key: l.reference },
               h('button', { type: 'button', className: 'dh-ap-link', onClick: () => openListing(l.reference) }, l.title), h('span', null, price(l)))))
@@ -149,8 +121,7 @@ export function createAgentProfiles(React) {
               safeImage(p.photo) && h('img', { src: p.photo, alt: '', loading: 'lazy' }),
               p.caption && h('p', null, p.caption),
               h('small', null, timeAgo(p.at), p.listingRef ? ' · ' : '', p.listingRef ? h('button', { type: 'button', className: 'dh-ap-link', onClick: () => openListing(p.listingRef) }, 'See listing') : null))))),
-          h(Contact, { agent }),
-          story !== null && h(StoryViewer, { agent, start: story, onClose: () => setStory(null) }))));
+          h(Contact, { agent }))));
   }
-  return { AgentStories, AgentProfileOverlay };
+  return { AgentStrip, AgentProfileOverlay };
 }

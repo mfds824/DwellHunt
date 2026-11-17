@@ -1,6 +1,6 @@
 import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings, locationSuggestions, locationQuery } from "./homepage-search.js?v=20261115-loc1";
 import { createOwnerFeed } from "./owner-listings-feed.js?v=20261117-lp2";
-import { createAgentProfiles } from "./agent-profiles.js?v=20261116-pr1";
+import { createAgentProfiles } from "./agent-profiles.js?v=20261117-ns1";
 // Homepage presentation only. Marketplace state, routes and integrations remain in app.js.
 export function createHomepage(
   React,
@@ -11,7 +11,7 @@ export function createHomepage(
 ) {
   const h = React.createElement;
   const OwnerFeed = createOwnerFeed(React);
-  const { AgentStories, AgentProfileOverlay } = createAgentProfiles(React);
+  const { AgentStrip, AgentProfileOverlay } = createAgentProfiles(React);
   const labels = {
     apartment: "Apartments & Condominiums",
     villa: "Villas",
@@ -640,7 +640,7 @@ export function createHomepage(
           ),
         ),
       ),
-      h(AgentStories),
+      h(AgentStrip),
       h(OwnerFeed),
       h(AgentProfileOverlay),
       h(
