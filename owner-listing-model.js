@@ -10,7 +10,7 @@ export const CATEGORY_RULES = {
   apartment: { rooms: true, floorArea: true, building: true, apartment: true },
   house: { rooms: true, floorArea: true, land: true, floors: true, outdoor: true },
   villa: { rooms: true, floorArea: true, land: true, floors: true, outdoor: true },
-  annex: { rooms: true, floorArea: true },
+  annex: { rooms: true, floorArea: true, annex: true },
   room: { roomOnly: true, rentOnly: true },
   commercial: { floorArea: true, commercial: true },
   land: { landOnly: true, land: true },
@@ -18,6 +18,9 @@ export const CATEGORY_RULES = {
 export const APARTMENT_TYPES = [['studio', 'Studio'], ['standard', 'Standard apartment'], ['duplex', 'Duplex'], ['penthouse', 'Penthouse']];
 export const COMMERCIAL_TYPES = [['office', 'Office'], ['shop', 'Shop / retail'], ['warehouse', 'Warehouse / storage'], ['other', 'Other commercial']];
 export const LAND_TYPES = [['residential', 'Residential'], ['commercial', 'Commercial'], ['agricultural', 'Agricultural / estate']];
+export const ANNEX_POSITIONS = [['upstairs', 'Upper floor of a house'], ['ground', 'Ground floor, attached to a house'], ['detached', 'Separate building on the same land']];
+export const KITCHEN_TYPES = [['own', 'Own kitchen'], ['pantry', 'Pantry / kitchenette'], ['shared', 'Shared with the main house'], ['none', 'No kitchen']];
+export const SALE_SCOPES = [['with-house', 'Sold together with the main house'], ['annex-only', 'Annex only, with its own deed or land share']];
 export const TENANT_TYPES = [['family', 'Families'], ['professionals', 'Working professionals'], ['students', 'Students'], ['foreigners', 'Foreigners / expats']];
 export const rulesFor = category => CATEGORY_RULES[category] || {};
 
@@ -28,6 +31,7 @@ export function createOwnerDraft(selection) {
     ownerName: '', email: '', phoneCountry: 'LK', countryCode: '+94', phoneNumber: '', phone: '', preferredContact: '',
     district: '', city: '', street: '', building: '', unit: '', publicBuildingName: false,
     apartmentType: '', commercialType: '', landType: '',
+    annexPosition: '', separateEntrance: '', kitchenType: '', ownerOnPremises: '', saleScope: '',
     title: '', bedrooms: '', bathrooms: '', bathroomType: '', floorArea: '', floorUnit: 'sqft', furnishing: '', condition: '',
     parking: '', parkingType: '', floorNumber: '', balcony: false, sharedFacilities: [], maintenance: '', maintenancePeriod: 'month',
     landArea: '', landUnit: 'perches', floors: '', garden: false, pool: false, features: [],
@@ -113,6 +117,11 @@ export function validateOwnerStep(d, step) {
     if (rules.landOnly) required('landType', 'Land type');
     if (!rules.landOnly) { required('furnishing', 'Furnishing'); required('condition', 'Property condition'); }
     if (!rules.landOnly && !rules.roomOnly) whole('parking', 'Parking spaces', 0, 100);
+    if (rules.annex) {
+      const choose = (key, message) => { if (!has(d[key])) errors[key] = message; };
+      choose('annexPosition', 'Choose where the annex is.'); choose('separateEntrance', 'Choose the type of entrance.'); choose('kitchenType', 'Choose the kitchen type.');
+      if (sale(d)) { choose('saleScope', 'Choose what the sale includes.'); positive('landArea', 'Land area'); required('landUnit', 'Land area unit'); }
+    }
     if (rules.apartment) {
       whole('floorNumber', 'Floor number', -10, 150);
       if (has(d.maintenance) && !number(d.maintenance)) errors.maintenance = 'Enter the maintenance charge as zero or more.';
@@ -202,6 +211,8 @@ export function publicOwnerListing(d) {
       sharedFacilities: [...d.sharedFacilities], maintenance: num(d.maintenance), maintenancePeriod: d.maintenancePeriod,
       ...(rent ? { maintenanceIncluded: d.maintenanceIncluded } : {}) } : {}),
     ...(rules.outdoor ? { garden: d.garden, pool: d.pool } : {}),
+    ...(rules.annex ? { annexPosition: d.annexPosition, separateEntrance: d.separateEntrance, kitchenType: d.kitchenType,
+      ...(rent ? { ownerOnPremises: d.ownerOnPremises } : { saleScope: d.saleScope, landArea: num(d.landArea), landUnit: d.landUnit }) } : {}),
     ...(rules.commercial ? { commercialType: d.commercialType } : {}),
     features: d.features.map(value => publicText(value, d)),
     photos: d.photos.filter(p => p.status === 'ready' && safeUploadUrl(p.url)).map((p, index) => ({ url: p.url, alt: `Property photo ${index + 1}` })),

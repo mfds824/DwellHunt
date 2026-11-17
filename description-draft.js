@@ -1,4 +1,4 @@
-import { APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, rulesFor, publicOwnerListing, publicText } from './owner-listing-model.js?v=20261116-ol1';
+import { APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, SALE_SCOPES, rulesFor, publicOwnerListing, publicText } from './owner-listing-model.js?v=20261117-ax1';
 import { formatPriceInput } from './price-input.js';
 
 // Builds a fact-based description draft on the owner's device. No AI service is used and nothing is sent.
@@ -15,7 +15,7 @@ export function listingKeyFacts(d) {
   if (rules.roomOnly && d.bathroomType) facts.push({ icon: '🛁', label: d.bathroomType === 'attached' ? 'Attached bathroom' : 'Shared bathroom' });
   if (!rules.landOnly && !rules.roomOnly && entered(d.parking)) facts.push({ icon: '🚗', label: count(d.parking, 'parking space') });
   if (rules.floorArea && Number(d.floorArea) > 0) facts.push({ icon: '📐', label: `${Number(d.floorArea).toLocaleString('en-US')} ${d.floorUnit}` });
-  if (rules.land && Number(d.landArea) > 0) facts.push({ icon: '🌳', label: `${Number(d.landArea).toLocaleString('en-US')} ${d.landUnit}` });
+  if ((rules.land || (rules.annex && d.selection.listingPurpose === 'buy')) && Number(d.landArea) > 0) facts.push({ icon: '🌳', label: `${Number(d.landArea).toLocaleString('en-US')} ${d.landUnit}` });
   return facts;
 }
 export function descriptionFactsKey(d) {
@@ -34,6 +34,11 @@ export function draftOwnerDescription(d) {
   const bullets = listingKeyFacts(d).map(fact => fact.label);
   if (!rules.landOnly && d.furnishing) bullets.push(`Furnishing: ${furnishingLabels[d.furnishing] || text(d.furnishing)}`);
   if (!rules.landOnly && d.condition) bullets.push(`Condition: ${text(d.condition)}`);
+  if (rules.annex && d.annexPosition) bullets.push(label(ANNEX_POSITIONS, d.annexPosition));
+  if (rules.annex && d.separateEntrance) bullets.push(d.separateEntrance === 'yes' ? 'Own separate entrance' : 'Shared entrance with the main house');
+  if (rules.annex && d.kitchenType) bullets.push(`Kitchen: ${label(KITCHEN_TYPES, d.kitchenType)}`);
+  if (rules.annex && sale && d.saleScope) bullets.push(label(SALE_SCOPES, d.saleScope));
+  if (rules.annex && !sale && d.ownerOnPremises === 'yes') bullets.push('The owner lives in the main house');
   if (rules.apartment && entered(d.floorNumber)) bullets.push(`Floor: ${Number(d.floorNumber) === 0 ? 'Ground floor' : d.floorNumber}`);
   const amenities = [...new Set([...(d.features || []), ...(rules.apartment ? d.sharedFacilities || [] : []), rules.apartment && d.balcony ? 'Balcony' : '',
     rules.outdoor && d.garden ? 'Garden' : '', rules.outdoor && d.pool ? 'Private pool' : ''].map(text).filter(Boolean))];

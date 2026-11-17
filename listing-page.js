@@ -6,6 +6,11 @@ const LABEL = {
   parkingType: { covered: 'covered', open: 'open', garage: 'garage', street: 'street' },
   rentalType: { 'long-term': 'Long-term rental', 'short-term': 'Short-term rental' },
 };
+const ANNEX = {
+  position: { upstairs: 'Upper floor of a house', ground: 'Ground floor, attached to a house', detached: 'Separate building on the same land' },
+  kitchen: { own: 'Own kitchen', pantry: 'Pantry / kitchenette', shared: 'Shared with the main house', none: 'No kitchen' },
+  scope: { 'with-house': 'The annex and the main house', 'annex-only': 'The annex only, with its own deed or land share' },
+};
 const number = value => Number(value).toLocaleString('en-US');
 const yesNo = value => value === true || value === 'yes' ? 'Yes' : value === false || value === 'no' ? 'No' : '';
 const titleCase = text => String(text || '').replace(/(^|[\s,(/-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
@@ -62,11 +67,16 @@ export function factGroups(l, category = {}) {
       ['Floor', Number(l.floorNumber) > 0 ? `${ordinal(l.floorNumber)} floor` : Number(l.floorNumber) === 0 && l.floorNumber !== null && l.floorNumber !== undefined ? 'Ground floor' : ''],
       ['Land area', Number(l.landArea) > 0 ? `${number(l.landArea)} ${l.landUnit || 'perches'}` : ''],
       ['Parking', parking],
+      ['Position', ANNEX.position[l.annexPosition] || ''],
+      ['Entrance', l.separateEntrance === 'yes' ? 'Own separate entrance' : l.separateEntrance === 'no' ? 'Shared with the main house' : ''],
+      ['Kitchen', ANNEX.kitchen[l.kitchenType] || ''],
+      ['Owner lives on site', l.ownerOnPremises === 'yes' ? 'Yes, in the main house' : l.ownerOnPremises === 'no' ? 'No' : ''],
       ['Shared facilities', words(l.sharedFacilities).join(', ')],
       ['Separate meters', yesNo(l.separateMeters)],
     ]],
     [l.purpose === 'buy' ? 'Sale terms' : 'Rental terms', l.purpose === 'buy' ? [
       ['Price', Number(l.price) > 0 ? money(l.price) : 'On request'],
+      ['Sale includes', ANNEX.scope[l.saleScope] || ''],
       ['Negotiable', l.negotiable ? 'Yes' : ''],
       ['Price per ' + (l.floorUnit || 'sqft'), pricePerArea(l) ? money(pricePerArea(l)) : ''],
       ['Availability', availableText(l)],
@@ -165,6 +175,8 @@ export function createListingPage(React, d) {
     const chips = [
       [d.CATEGORY[l.category] || 'Property', l.apartmentType ? titleCase(l.apartmentType) : ''],
       [LABEL.furnishing[l.furnishing] || '', ''],
+      [l.separateEntrance === 'yes' ? 'Separate entrance' : '', ''],
+      [l.kitchenType === 'own' ? 'Own kitchen' : '', ''],
       [Number(l.parking) > 0 ? `${l.parking} parking` : '', l.parkingType ? LABEL.parkingType[l.parkingType] || l.parkingType : ''],
       [Number(l.floorNumber) > 0 ? `${ordinal(l.floorNumber)} floor` : '', ''],
       [pricePerArea(l) ? `${money(l, pricePerArea(l))}` : '', pricePerArea(l) ? 'per ' + (l.floorUnit || 'sqft') : ''],

@@ -1,11 +1,11 @@
-import { OWNER_STEPS, CATEGORY_LABELS, APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, rulesFor, createOwnerDraft, validateOwnerStep,
+import { OWNER_STEPS, CATEGORY_LABELS, APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, SALE_SCOPES, rulesFor, createOwnerDraft, validateOwnerStep,
   validateOwnerDraft, publicOwnerListing, ownerSubmission, unusualFigures, saveOwnerDraft, loadOwnerDraft, OWNER_DRAFT_KEY, combineOwnerPhone,
-  validatePhotoCount, safeUploadUrl } from './owner-listing-model.js?v=20261116-ol1';
+  validatePhotoCount, safeUploadUrl } from './owner-listing-model.js?v=20261117-ax1';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 import { createCountryCodePicker } from './country-code-picker.js';
 import { createPriceInput } from './price-input.js';
-import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261116-ol1';
-import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261116-ol1';
+import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261117-ax1';
+import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261117-ax1';
 
 const primary = 'px-6 py-3 rounded-xl bg-emerald-900 hover:bg-emerald-800 text-white font-bold text-xs disabled:opacity-40';
 const secondary = 'px-5 py-2.5 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50';
@@ -252,6 +252,13 @@ export function createOwnerListing(React) {
         !rules.landOnly && field('condition', 'Condition', { options: ['New', 'Good condition', 'Needs renovation', 'Under construction'] }),
         !rules.landOnly && !rules.roomOnly && field('parking', 'Parking spaces', { type: 'number', min: 0, step: 1 }),
         !rules.landOnly && !rules.roomOnly && field('parkingType', 'Parking type', { optional: true, options: [['covered', 'Covered'], ['open', 'Open'], ['street', 'On the street'], ['none', 'No parking']] }),
+        rules.annex && field('annexPosition', 'Where is the annex?', { options: ANNEX_POSITIONS }),
+        rules.annex && field('separateEntrance', 'Entrance', { options: [['yes', 'Own separate entrance'], ['no', 'Shared entrance with the main house']] }),
+        rules.annex && field('kitchenType', 'Kitchen', { options: KITCHEN_TYPES }),
+        rules.annex && !sale && field('ownerOnPremises', 'Does the owner live on the same property?', { optional: true, options: [['yes', 'Yes, in the main house'], ['no', 'No']] }),
+        rules.annex && sale && field('saleScope', 'What does the sale include?', { options: SALE_SCOPES }),
+        rules.annex && sale && field('landArea', d.saleScope === 'annex-only' ? 'Land share with the annex' : 'Total land area', { type: 'number', min: 0.01, step: 'any' }),
+        rules.annex && sale && field('landUnit', 'Unit', { options: [['perches', 'Perches'], ['acres', 'Acres'], ['sqft', 'Square feet'], ['sqm', 'Square metres']] }),
         rules.apartment && field('floorNumber', 'Floor number', { type: 'number', min: -10, step: 1, hint: '0 = ground floor.' }),
         rules.apartment && field('maintenance', `Maintenance charge (${d.currency} per month)`, { type: 'number', min: 0, step: 'any', optional: true })),
         rules.apartment && h(React.Fragment, null, check('balcony', 'Balcony'), checks('sharedFacilities', 'Building facilities (optional)', SHARED)),
