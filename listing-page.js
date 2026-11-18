@@ -209,11 +209,11 @@ export function createListingPage(React, d) {
     const name = (l.contact && l.contact.displayName) || (agent ? 'the agent' : 'the owner');
     return h('div', { className: 'dh-lp-contact', id: 'dh-lp-contact' },
       h('p', { className: 'dh-lp-contact-price' }, d.ownerPriceText(l)),
-      agent ? h(d.AgentEnquiry, { listing: l }) : h('div', { className: 'dh-lp-contact-owner' },
+      d.hasEnquiryForm(l) ? h(d.AgentEnquiry, { listing: l }) : h('div', { className: 'dh-lp-contact-owner' },
         h('h3', null, `Contact ${name} through DwellHunt`),
         h('p', null, 'DwellHunt verified this owner and passes your message on, so their phone number stays private.')),
       h('div', { className: 'dh-lp-contact-actions' },
-        h('a', { className: agent ? 'dh-text-button' : 'dh-button', href: d.ownerEnquiryUrl(l), target: '_blank', rel: 'noopener noreferrer' }, agent ? 'Or ask DwellHunt on WhatsApp' : 'Enquire on WhatsApp'),
+        h('a', { className: d.hasEnquiryForm(l) ? 'dh-text-button' : 'dh-button', href: d.ownerEnquiryUrl(l), target: '_blank', rel: 'noopener noreferrer' }, d.hasEnquiryForm(l) ? 'Or ask DwellHunt on WhatsApp' : 'Enquire on WhatsApp'),
         h('a', { className: 'dh-text-button', href: d.ownerEnquiryUrl(l, 'viewing'), target: '_blank', rel: 'noopener noreferrer' }, 'Request a viewing')),
       h('p', { className: 'dh-lp-fine' }, `Ref ${l.reference}`));
   }

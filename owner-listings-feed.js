@@ -1,6 +1,6 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
-import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261118-rp1";
+import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261118-oe1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
 const safeImage = url => typeof url === 'string' && /^https:\/\/res\.cloudinary\.com\//.test(url) ? url : '';
@@ -37,11 +37,14 @@ export function cleanFeed(body) {
 }
 export const isAgentListing = l => !!l && l.listedBy === 'agent';
 export function listerLabel(l) { return `Listed by ${(l.contact && l.contact.displayName) || 'Private owner'} · ✓ Verified ${isAgentListing(l) ? 'agent' : 'owner'}`; }
-/** The lead the agent-listing enquiry form sends (same shape as the property-page enquiry form). */
+/** Owner rentals get the enquiry form too; DwellHunt screens each enquiry and forwards it to the owner. */
+export const hasEnquiryForm = l => isAgentListing(l) || (!!l && l.purpose !== 'buy');
+/** The lead the listing enquiry form sends (same shape as the property-page enquiry form). A chosen date makes it a viewing request. */
 export function agentEnquiryPayload(l, f, at = new Date()) {
-  return { customer_name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), enquiry_type: 'general', property: l.title,
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(f.date || '')) ? f.date : '';
+  return { customer_name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), enquiry_type: date ? 'schedule_tour' : 'general', property: l.title,
     property_id: l.reference, agency_id: '', location: (l.location && l.location.city) || '', budget: '', message: f.message.trim(),
-    preferred_date: '', source: 'DwellHunt Website', submittedAt: at.toISOString(), lead_id: 'enq-' + at.getTime(), consent: true, consent_at: at.toISOString() };
+    preferred_date: date, source: 'DwellHunt Website', submittedAt: at.toISOString(), lead_id: 'enq-' + at.getTime(), consent: true, consent_at: at.toISOString() };
 }
 export function referenceFromHash(hash) {
   const match = /^#owner-listing=(OL-\d{4}-\d{4})$/.exec(decodeURIComponent(String(hash || '')));
@@ -60,8 +63,11 @@ export function createOwnerFeed(React) {
   const h = React.createElement;
   /** Enquiry form for agent listings. lead-turnstile.js adds the human check when this posts to leadUrl. */
   function AgentEnquiry({ listing: l }) {
-    const agency = (l.contact && l.contact.displayName) || 'the agent';
-    const [f, setF] = React.useState({ name: '', email: '', phone: '', message: `Hello, I'm interested in "${l.title}". Please send me more details.`, consent: false });
+    const owner = !isAgentListing(l);
+    const agency = (l.contact && l.contact.displayName) || (owner ? 'the owner' : 'the agent');
+    const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+    const [f, setF] = React.useState({ name: '', email: '', phone: '', date: '', consent: false,
+      message: owner ? `Hello, I'm interested in renting "${l.title}". Is it still available?` : `Hello, I'm interested in "${l.title}". Please send me more details.` });
     const [state, setState] = React.useState({ phase: 'idle', message: '' });
     const honeypot = React.useRef(null);
     const set = key => event => setF(old => ({ ...old, [key]: key === 'consent' ? event.target.checked : event.target.value }));
@@ -83,21 +89,25 @@ export function createOwnerFeed(React) {
       } catch { setState({ phase: 'error', message: 'Your enquiry could not be sent. Please try again, or use WhatsApp.' }); }
     };
     if (state.phase === 'done') return h('div', { className: 'dh-ol-enquiry dh-ol-enquiry-done', role: 'status' },
-      h('strong', null, 'Enquiry sent'), h('p', null, `${agency} will contact you soon. We’ve emailed you a confirmation.`));
+      h('strong', null, 'Enquiry sent'), h('p', null, owner
+        ? 'DwellHunt will check your enquiry and ask the owner if it’s still available, then contact you. We’ve emailed you a confirmation.'
+        : `${agency} will contact you soon. We’ve emailed you a confirmation.`));
     return h('form', { className: 'dh-ol-enquiry', onSubmit: submit, noValidate: true, 'aria-labelledby': 'dh-ol-enquiry-title' },
-      h('h3', { id: 'dh-ol-enquiry-title' }, `Send an enquiry to ${agency}`),
+      h('h3', { id: 'dh-ol-enquiry-title' }, owner ? 'Send an enquiry about this home' : `Send an enquiry to ${agency}`),
       h('div', { className: 'dh-ol-enquiry-row' },
         h('label', null, 'Your name', h('input', { value: f.name, onChange: set('name'), autoComplete: 'name', required: true })),
         h('label', null, 'Email', h('input', { type: 'email', value: f.email, onChange: set('email'), autoComplete: 'email', required: true }))),
       h('label', null, 'Phone / WhatsApp (optional)', h('input', { type: 'tel', value: f.phone, onChange: set('phone'), autoComplete: 'tel' })),
+      owner && h('label', null, 'Preferred viewing date (optional)', h('input', { type: 'date', min: today, value: f.date, onChange: set('date') })),
       h('label', null, 'Message', h('textarea', { rows: 3, value: f.message, onChange: set('message') })),
       h('label', { className: 'dh-ol-enquiry-consent' }, h('input', { type: 'checkbox', checked: f.consent, onChange: set('consent') }),
-        h('span', null, `I agree that DwellHunt and ${agency} may use these details to reply to this enquiry.`)),
+        h('span', null, owner ? 'I agree that DwellHunt may use these details to reply. DwellHunt shares my first name and message with the owner, not my phone or email.'
+          : `I agree that DwellHunt and ${agency} may use these details to reply to this enquiry.`)),
       h('div', { className: 'dh-hp', 'aria-hidden': 'true' }, h('label', null, 'Leave empty', h('input', { ref: honeypot, type: 'text', tabIndex: -1, autoComplete: 'off', defaultValue: '' }))),
       state.message && h('p', { className: 'dh-ol-enquiry-error', role: 'alert' }, state.message),
       h('button', { type: 'submit', className: 'dh-button', disabled: state.phase === 'sending' }, state.phase === 'sending' ? 'Sending…' : 'Send enquiry'));
   }
-  const ListingPage = createListingPage(React, { AgentEnquiry, CATEGORY, safeImage, ownerPriceText, ownerPlace, ownerFacts, ownerEnquiryUrl, isAgentListing });
+  const ListingPage = createListingPage(React, { AgentEnquiry, hasEnquiryForm, CATEGORY, safeImage, ownerPriceText, ownerPlace, ownerFacts, ownerEnquiryUrl, isAgentListing });
 
   return function OwnerFeed() {
     const [listings, setListings] = React.useState([]);
@@ -134,7 +144,7 @@ export function createOwnerFeed(React) {
             : h('p', { className: 'dh-agency' }, listerLabel(l)),
           h('div', { className: 'dh-card-actions' },
             h('button', { type: 'button', className: 'dh-text-button', onClick: () => show(l.reference) }, 'View details'),
-            isAgentListing(l) ? h('button', { type: 'button', className: 'dh-text-button', onClick: () => show(l.reference) }, 'Enquire')
+            hasEnquiryForm(l) ? h('button', { type: 'button', className: 'dh-text-button', onClick: () => show(l.reference) }, 'Enquire')
               : h('a', { className: 'dh-text-button', href: ownerEnquiryUrl(l), target: '_blank', rel: 'noopener noreferrer' }, 'Enquire')))))),
       current && h(ListingPage, { listing: current, others: listings.filter(o => o.reference !== current.reference), onClose: () => show(''), onOpen: show }),
       open && !current && h('p', { className: 'dh-results-note', role: 'status' }, 'That listing is no longer available. Browse the other owner listings above.'));
