@@ -1079,7 +1079,7 @@
   cursor: pointer;
 }
 
-/* Header agency badge: shorten to "by ZentroX" on narrow phones so the Menu button stays on the same row. */
+/* Header agency badge: shorten to "by Ophiola" on narrow phones so the Menu button stays on the same row. */
 @media (max-width: 479px) {
   .dh-zx-prefix { display: none; }
 }
