@@ -102,41 +102,6 @@
   object-position: center;
   order: 2;
 }
-/* Matrix "digital rain" wallpaper: black hero, green code, light text. */
-.dh-home .dh-hero {
-  background: #000;
-}
-.dh-matrix-rain {
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-.dh-home .dh-hero:after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 70% 60% at 25% 35%,
-    rgba(0, 0, 0, 0.72) 0%,
-    rgba(0, 0, 0, 0.35) 55%,
-    rgba(0, 0, 0, 0) 100%
-  );
-}
-.dh-home .dh-hero h1 {
-  color: #f2fff4;
-  text-shadow: 0 0 18px rgba(0, 255, 90, 0.35);
-}
-.dh-home .dh-hero .dh-eyebrow {
-  color: #4dff88 !important;
-}
-.dh-home .dh-hero .dh-intro {
-  color: #d5eedb;
-}
 .dh-hero-content {
   padding: 40px 18px;
   position: relative;

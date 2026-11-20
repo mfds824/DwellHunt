@@ -25,109 +25,6 @@ export function createHomepage(
     store.setCurrentView(view);
     window.scrollTo({ top: 0, behavior: "instant" });
   };
-  // Decorative Matrix-style "digital rain" filling the hero. Three layers of
-  // different sizes give depth; it pauses off-screen and draws one still
-  // frame for visitors who prefer reduced motion.
-  function MatrixRain() {
-    const ref = React.useRef(null);
-    React.useEffect(() => {
-      const canvas = ref.current;
-      const ctx = canvas && canvas.getContext("2d");
-      if (!ctx) return undefined;
-      const glyphs =
-        "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ012345789Z:.=*+-<>¦|";
-      const pick = () => glyphs[(Math.random() * glyphs.length) | 0];
-      const layers = [
-        { size: 11, color: "0, 185, 60", glow: 0, density: 1, speed: 0.8 },
-        { size: 17, color: "0, 235, 80", glow: 8, density: 0.9, speed: 0.9 },
-        { size: 28, color: "70, 255, 120", glow: 16, density: 0.3, speed: 1 },
-      ];
-      const still = window.matchMedia("(prefers-reduced-motion: reduce)");
-      let drops = [];
-      let width = 0;
-      let height = 0;
-      let frame = 0;
-      let last = 0;
-      let visible = true;
-      const font = (size) =>
-        `${size}px "MS Gothic", "Yu Gothic", "Hiragino Kaku Gothic Pro", monospace`;
-      const resize = () => {
-        const ratio = Math.min(window.devicePixelRatio || 1, 2);
-        ({ width, height } = canvas.getBoundingClientRect());
-        canvas.width = Math.round(width * ratio);
-        canvas.height = Math.round(height * ratio);
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, width, height);
-        drops = [];
-        layers.forEach((layer) => {
-          const rows = Math.ceil(height / layer.size);
-          for (let x = 0; x < width; x += layer.size) {
-            if (Math.random() > layer.density) continue;
-            drops.push({
-              layer,
-              x,
-              row: Math.floor(Math.random() * rows),
-              prev: null,
-              rate: layer.speed * (0.5 + Math.random() * 0.5),
-            });
-          }
-        });
-        // Pre-run the rain so the wallpaper starts full instead of empty.
-        for (let i = 0; i < 140; i += 1) tick();
-      };
-      const tick = () => {
-        // Fade the previous frame so every column leaves a trail.
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
-        ctx.fillRect(0, 0, width, height);
-        ctx.textBaseline = "top";
-        drops.forEach((drop) => {
-          if (Math.random() > drop.rate) return;
-          const { size, color, glow } = drop.layer;
-          ctx.font = font(size);
-          ctx.shadowColor = `rgb(${color})`;
-          ctx.shadowBlur = glow;
-          if (drop.prev) {
-            // Repaint the old head green so only the newest glyph glows white.
-            ctx.fillStyle = `rgb(${color})`;
-            ctx.fillText(pick(), drop.x, drop.prev * size);
-          }
-          ctx.fillStyle = "rgb(210, 255, 220)";
-          ctx.fillText(pick(), drop.x, drop.row * size);
-          drop.prev = drop.row;
-          drop.row += 1;
-          if (drop.row * size > height && Math.random() > 0.96) {
-            drop.row = 0;
-            drop.prev = null;
-          }
-        });
-      };
-      const step = (time) => {
-        frame = requestAnimationFrame(step);
-        if (!visible || time - last < 45) return;
-        last = time;
-        tick();
-      };
-      const resizer = new ResizeObserver(resize);
-      resizer.observe(canvas);
-      const watcher = new IntersectionObserver(([entry]) => {
-        visible = entry.isIntersecting;
-      });
-      watcher.observe(canvas);
-      if (!still.matches) frame = requestAnimationFrame(step);
-      return () => {
-        cancelAnimationFrame(frame);
-        resizer.disconnect();
-        watcher.disconnect();
-      };
-    }, []);
-    return h("canvas", {
-      ref,
-      className: "dh-matrix-rain",
-      "aria-hidden": "true",
-    });
-  }
   const button = (text, onClick, className = "dh-button", props = {}) =>
     h("button", { type: "button", onClick, className, ...props }, text);
   function Header() {
@@ -387,7 +284,12 @@ export function createHomepage(
       "div",
       { id: "dh-home", className: "dh-home" },
       h("section", { className: "dh-hero", "aria-labelledby": "dh-motto" },
-        h(MatrixRain),
+        h("img", {
+          className: "dh-hero-photo",
+          src: "./assets/colombo-condo-hero.png",
+          alt: "A golden-hour Colombo condominium interior overlooking the skyline, with a couple and their realtor on the right",
+          fetchPriority: "high", width: 1671, height: 941,
+        }),
         h("div", { className: "dh-hero-content" },
           h("h1", { id: "dh-motto" }, "A Higher Way Home."),
           h("p", { className: "dh-intro" }, "Verified apartments and homes in Sri Lanka, starting with Colombo."),
