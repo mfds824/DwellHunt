@@ -40,7 +40,7 @@ export function createOwnerDraft(selection) {
     tenantTypes: [], petsAllowed: '', separateMeters: '', maintenanceIncluded: false, noticePeriod: '',
     checkInTime: '', availableFrom: '', availabilityNote: '', utilities: [], charges: '', unusualConfirmed: false,
     photos: [], floorPlan: null, description: '',
-    publicName: '', locationPrecision: 'area',
+    publicName: '', locationPrecision: 'area', videoViewing: false,
     authorized: false, accurate: false, photoPermission: false, consent: false,
   };
 }
@@ -218,6 +218,8 @@ export function publicOwnerListing(d) {
     photos: d.photos.filter(p => p.status === 'ready' && safeUploadUrl(p.url)).map((p, index) => ({ url: p.url, alt: `Property photo ${index + 1}` })),
     floorPlan: d.floorPlan?.status === 'ready' && safeUploadUrl(d.floorPlan.url) ? d.floorPlan.url : null,
     description: publicText(d.description, d),
+    // Private owners may offer to show the home on a video call they start themselves.
+    ...(d.selection.listingRole !== 'agent' && d.videoViewing === true ? { videoViewing: true } : {}),
     contact: { via: 'DwellHunt', displayName: publicText(d.publicName, d).trim() || 'Private owner' },
   };
 }

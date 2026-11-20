@@ -1,6 +1,6 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
-import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261118-oe1";
+import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261121-vv1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
 const safeImage = url => typeof url === 'string' && /^https:\/\/res\.cloudinary\.com\//.test(url) ? url : '';
@@ -23,7 +23,9 @@ export function ownerPlace(l) {
   return [loc.building, loc.address, loc.city, loc.district].filter(Boolean).join(', ');
 }
 export function ownerEnquiryUrl(l, kind = 'enquiry') {
-  const text = kind === 'viewing'
+  const text = kind === 'video'
+    ? `Hi DwellHunt, I would like a video viewing of ${l.title} (ref ${l.reference}). My preferred dates are: `
+    : kind === 'viewing'
     ? `Hi DwellHunt, I would like to view ${l.title} (ref ${l.reference}). My preferred dates are: `
     : `Hi DwellHunt, I am interested in ${l.title} (ref ${l.reference}). `;
   return WHATSAPP + encodeURIComponent(text);
@@ -39,10 +41,12 @@ export const isAgentListing = l => !!l && l.listedBy === 'agent';
 export function listerLabel(l) { return `Listed by ${(l.contact && l.contact.displayName) || 'Private owner'} · ✓ Verified ${isAgentListing(l) ? 'agent' : 'owner'}`; }
 /** Owner rentals get the enquiry form too; DwellHunt screens each enquiry and forwards it to the owner. */
 export const hasEnquiryForm = l => isAgentListing(l) || (!!l && l.purpose !== 'buy');
-/** The lead the listing enquiry form sends (same shape as the property-page enquiry form). A chosen date makes it a viewing request. */
+/** The lead the listing enquiry form sends (same shape as the property-page enquiry form). A chosen date makes it a viewing request;
+ * a video choice (only on listings whose owner offers video viewings) makes it a video viewing request. */
 export function agentEnquiryPayload(l, f, at = new Date()) {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(f.date || '')) ? f.date : '';
-  return { customer_name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), enquiry_type: date ? 'schedule_tour' : 'general', property: l.title,
+  const video = !!(l && l.videoViewing) && !isAgentListing(l) && f.viewing === 'video';
+  return { customer_name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), enquiry_type: video ? 'video_viewing' : date ? 'schedule_tour' : 'general', property: l.title,
     property_id: l.reference, agency_id: '', location: (l.location && l.location.city) || '', budget: '', message: f.message.trim(),
     preferred_date: date, source: 'DwellHunt Website', submittedAt: at.toISOString(), lead_id: 'enq-' + at.getTime(), consent: true, consent_at: at.toISOString() };
 }
@@ -66,7 +70,8 @@ export function createOwnerFeed(React) {
     const owner = !isAgentListing(l);
     const agency = (l.contact && l.contact.displayName) || (owner ? 'the owner' : 'the agent');
     const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
-    const [f, setF] = React.useState({ name: '', email: '', phone: '', date: '', consent: false,
+    const video = owner && l.videoViewing === true;
+    const [f, setF] = React.useState({ name: '', email: '', phone: '', date: '', viewing: 'in-person', consent: false,
       message: owner ? `Hello, I'm interested in renting "${l.title}". Is it still available?` : `Hello, I'm interested in "${l.title}". Please send me more details.` });
     const [state, setState] = React.useState({ phase: 'idle', message: '' });
     const honeypot = React.useRef(null);
@@ -98,7 +103,12 @@ export function createOwnerFeed(React) {
         h('label', null, 'Your name', h('input', { value: f.name, onChange: set('name'), autoComplete: 'name', required: true })),
         h('label', null, 'Email', h('input', { type: 'email', value: f.email, onChange: set('email'), autoComplete: 'email', required: true }))),
       h('label', null, 'Phone / WhatsApp (optional)', h('input', { type: 'tel', value: f.phone, onChange: set('phone'), autoComplete: 'tel' })),
-      owner && h('label', null, 'Preferred viewing date (optional)', h('input', { type: 'date', min: today, value: f.date, onChange: set('date') })),
+      video && h('fieldset', { className: 'dh-ol-enquiry-viewing' }, h('legend', null, 'How would you like to view it?'),
+        [['in-person', 'In person'], ['video', 'Video call with the owner']].map(([value, label]) => h('label', { key: value },
+          h('input', { type: 'radio', name: 'dh-ol-viewing', value, checked: f.viewing === value, onChange: set('viewing') }), h('span', null, label)))),
+      owner && h('label', null, f.viewing === 'video' ? 'Preferred video call date (optional)' : 'Preferred viewing date (optional)',
+        h('input', { type: 'date', min: today, value: f.date, onChange: set('date') })),
+      video && f.viewing === 'video' && h('p', { className: 'dh-ol-enquiry-note' }, 'The owner starts a WhatsApp or Google Meet video call and walks you through the home. DwellHunt confirms the time with you first.'),
       h('label', null, 'Message', h('textarea', { rows: 3, value: f.message, onChange: set('message') })),
       h('label', { className: 'dh-ol-enquiry-consent' }, h('input', { type: 'checkbox', checked: f.consent, onChange: set('consent') }),
         h('span', null, owner ? 'I agree that DwellHunt may use these details to reply. DwellHunt shares my first name and message with the owner, not my phone or email.'

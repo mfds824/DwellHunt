@@ -1,11 +1,11 @@
 import { OWNER_STEPS, CATEGORY_LABELS, APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, SALE_SCOPES, rulesFor, createOwnerDraft, validateOwnerStep,
   validateOwnerDraft, publicOwnerListing, ownerSubmission, unusualFigures, saveOwnerDraft, loadOwnerDraft, OWNER_DRAFT_KEY, combineOwnerPhone,
-  validatePhotoCount, safeUploadUrl } from './owner-listing-model.js?v=20261117-ax1';
+  validatePhotoCount, safeUploadUrl } from './owner-listing-model.js?v=20261121-vv1';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 import { createCountryCodePicker } from './country-code-picker.js';
 import { createPriceInput } from './price-input.js';
-import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261117-ax1';
-import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261117-ax1';
+import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261121-vv1';
+import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261121-vv1';
 
 const primary = 'px-6 py-3 rounded-xl bg-emerald-900 hover:bg-emerald-800 text-white font-bold text-xs disabled:opacity-40';
 const secondary = 'px-5 py-2.5 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50';
@@ -297,6 +297,8 @@ export function createOwnerListing(React) {
         field('publicName', 'Name shown on the listing', { optional: true, placeholder: 'Private owner', hint: 'Leave empty to show “Private owner”, or enter a first name.' }),
         field('locationPrecision', 'How much of the location to show', { options: [['district', 'District only'], ['area', 'City / area and district (recommended)'], ['exact', 'Exact street address']] }),
         rules.building && check('publicBuildingName', `Show the building name “${d.building || 'building'}” on the listing`, 'Your unit number is never shown.'),
+        d.selection.listingRole !== 'agent' && check('videoViewing', 'I can show the home on a video call (optional)',
+          'Buyers and tenants who live far away can ask for a video viewing. DwellHunt checks each request and sends it to you first. If you agree, you start a WhatsApp or Google Meet video call and walk them through the home. Leave this unticked if you only want in-person viewings.'),
         h('h3', { className: 'font-bold text-stone-900' }, 'How your listing will look'), publicCard()),
       () => send.phase === 'done' ? null : h(React.Fragment, null,
         validateOwnerDraft(d).map(section => h('div', { className: 'dh-owner-error-summary', key: section.step }, h('strong', null, `${OWNER_STEPS[section.step]} needs attention`),
