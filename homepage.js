@@ -75,11 +75,6 @@ export function createHomepage(
         button("Agencies & agents", () => go(store, "agencies"), "dh-nav-link"),
         button("Agency Portal", () => go(store, "dashboard"), "dh-nav-link"),
         h(
-          "a",
-          { href: "#dh-ai-prompt", className: "dh-nav-link" },
-          "AI search",
-        ),
-        h(
           "select",
           {
             "aria-label": "Display currency",
@@ -185,8 +180,6 @@ export function createHomepage(
           p.isNegotiable &&
             h("span", { className: "dh-negotiable" }, "Negotiable"),
         ),
-        p.purpose === "buy" && comparisonPriceLKR(p) > 0 &&
-          h("p", { className: "dh-monthly-estimate" }, `≈ LKR ${Math.round(monthlyForPrice(comparisonPriceLKR(p))).toLocaleString("en-US")} / month with a home loan`),
         h(
           "h3",
           null,
@@ -201,32 +194,38 @@ export function createHomepage(
           { className: "dh-address" },
           [p.address, p.city].filter(Boolean).join(", "),
         ),
+        // One quiet line of facts; agency, update date and loan estimate stay on the details page.
         h(
-          "ul",
-          { className: "dh-property-specs", "aria-label": "Property details" },
-          h("li", null, `${p.bedrooms ?? "—"} Beds`),
-          h("li", null, `${p.bathrooms ?? "—"} Baths`),
-          h("li", null, `${p.floorAreaSqFt?.toLocaleString() || "—"} sq ft`),
-        ),
-        p.agencyName &&
-          button(
-            p.agencyName,
-            () => store.navigateToAgency(p.agencyId),
-            "dh-agency-link",
-          ),
-        p.updatedAt &&
-          h(
-            "p",
-            { className: "dh-agency" },
-            `Updated ${new Date(p.updatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Colombo" })}`,
-          ),
-        button(
-          "View details",
-          () => store.navigateToProperty(p.id),
-          "dh-text-button",
+          "p",
+          { className: "dh-property-facts", "aria-label": "Property details" },
+          [p.bedrooms ? `${p.bedrooms} bed${p.bedrooms === 1 ? "" : "s"}` : "", p.bathrooms ? `${p.bathrooms} bath${p.bathrooms === 1 ? "" : "s"}` : "",
+            p.floorAreaSqFt ? `${p.floorAreaSqFt.toLocaleString("en-US")} sq ft` : ""].filter(Boolean).join(" · "),
         ),
       ),
     );
+  }
+  const icon = (paths) => h("svg", { viewBox: "0 0 24 24", width: 26, height: 26, fill: "none", stroke: "currentColor", strokeWidth: 1.7,
+    strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, paths.map((d, i) => h("path", { key: i, d })));
+  const STEP_ICONS = {
+    search: ["M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", "M20 20l-4-4"],
+    enquire: ["M4 5h16v11H8l-4 4z", "M8 9h8", "M8 12h5"],
+    view: ["M3 7h12v10H3z", "M15 11l6-4v10l-6-4"],
+  };
+  /** A few areas with real homes, as photo tiles: one tap narrows the listings to that area. */
+  function AreaTiles({ inventory, onPick }) {
+    const areas = [];
+    for (const p of inventory) {
+      if (!p.city || !(p.images || [])[0]) continue;
+      const known = areas.find(a => a.city === p.city);
+      if (known) known.count++; else areas.push({ city: p.city, photo: p.images[0], count: 1 });
+    }
+    const shown = areas.sort((a, b) => b.count - a.count).slice(0, 4);
+    if (shown.length < 2) return null;
+    return h("section", { className: "dh-section dh-areas", "aria-labelledby": "dh-areas-title" },
+      h("h2", { id: "dh-areas-title" }, "Explore by area"),
+      h("div", { className: "dh-area-grid" }, shown.map(a => h("button", { key: a.city, type: "button", className: "dh-area-tile", onClick: () => onPick(a.city) },
+        h("img", { src: a.photo, alt: "", loading: "lazy" }),
+        h("span", null, h("strong", null, a.city), h("small", null, `${a.count} home${a.count === 1 ? "" : "s"}`))))));
   }
   function ResultsBar({ id, count, sortBy, onSort, featured = false, purpose, shown = count, invalid = false }) {
     return h("div", { className: "dh-results-bar" },
@@ -236,64 +235,9 @@ export function createHomepage(
         h("select", { id, value: sortBy, onChange: event => onSort(event.target.value), "aria-label": featured ? "Sort featured properties by" : "Sort matching listings by" },
           SORT_OPTIONS.map(([value, label]) => h("option", { key: value, value }, label)))));
   }
-  function Featured({ purpose, sortBy, onSort }) {
-    const store = useMarketplace();
-    const [tab, setTab] = React.useState("all");
-    const featured = store.properties.filter(
-      (p) => residential(p) && p.featured && p.purpose === purpose,
-    );
-    const tabs = [
-      ["all", "All featured"],
-      ...Object.entries(labels).filter(([key]) =>
-        featured.some((p) => p.category === key),
-      ),
-    ];
-    const properties = sortHomeListings(featured.filter((p) => tab === "all" || p.category === tab), sortBy);
-    if (!featured.length) return null;
-    return h(
-      "section",
-      {
-        className: "dh-section dh-featured",
-        "aria-labelledby": "dh-featured-title",
-      },
-      h(
-        "div",
-        { className: "dh-section-heading" },
-        h(
-          "div",
-          null,
-          h("p", { className: "dh-eyebrow" }, "From the existing portfolio"),
-          h("h2", { id: "dh-featured-title" }, "Featured properties"),
-        ),
-      ),
-      h(
-        "div",
-        {
-          className: "dh-property-tabs",
-          role: "group",
-          "aria-label": "Featured property types",
-        },
-        tabs.map(([key, label]) =>
-          button(label, () => setTab(key), "dh-property-tab", {
-            key,
-            "aria-pressed": tab === key,
-          }),
-        ),
-      ),
-      h(ResultsBar, { id: "dh-featured-sort", count: properties.length, sortBy, onSort, featured: true, purpose, shown: Math.min(6, properties.length) }),
-      h(
-        "div",
-        { className: "dh-property-grid" },
-        properties
-          .slice(0, 6)
-          .map((p) => h(PropertyCard, { key: p.id, property: p })),
-      ),
-    );
-  }
   function Home() {
     const store = useMarketplace();
     const [purpose, setPurpose] = React.useState("buy");
-    const [brief, setBrief] = React.useState("");
     const [location, setLocation] = React.useState("");
     const [minPrice, setMinPrice] = React.useState("");
     const [maxPrice, setMaxPrice] = React.useState("");
@@ -312,8 +256,10 @@ export function createHomepage(
     const shown = sortHomeListings(filterHomeListings(inventory, {
       purpose, budgetMode, category, location, minPrice, maxPrice, bedrooms, savedOnly,
     }, store.isPropertySaved), sortBy);
+    const savedCount = inventory.filter((p) => store.isPropertySaved(p.id)).length;
     // The advanced search filters by total price, so a monthly budget is converted to the matching price range.
     const totalBudget = value => { const v = budgetValue(value, kind); return v === null || kind !== "monthly" ? v : Math.round(priceForMonthly(v)); };
+    const toListings = () => document.getElementById("dh-listings")?.scrollIntoView({ behavior: "smooth", block: "start" });
     const search = (event, advanced = false) => {
       event.preventDefault();
       if (budgetProblem) return;
@@ -323,385 +269,104 @@ export function createHomepage(
         bedrooms, category, sortBy,
       });
       if (advanced) go(store, "search");
-      else document.getElementById("dh-listings")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      else toListings();
+    };
+    const resetAll = () => {
+      setLocation(""); setMinPrice(""); setMaxPrice(""); setBedrooms("any"); setBudgetMode("total");
+      setCategory("apartment"); setSavedOnly(false); setSortBy("newest");
     };
     const select = (id, title, value, onChange, options) =>
-      h(
-        "label",
-        { htmlFor: id },
-        title,
-        h(
-          "select",
-          {
-            id,
-            value,
-            "aria-label": title,
-            onChange: (e) => onChange(e.target.value),
-          },
-          options.map(([value, text, disabled = false]) =>
-            h("option", { key: value, value, disabled }, text),
-          ),
-        ),
-      );
-    const steps = (items) =>
-      h(
-        "ol",
-        { className: "dh-steps" },
-        items.map(([title, text]) =>
-          h("li", { key: title }, h("strong", null, title), h("p", null, text)),
-        ),
-      );
+      h("label", { htmlFor: id }, title,
+        h("select", { id, value, "aria-label": title, onChange: (e) => onChange(e.target.value) },
+          options.map(([value, text, disabled = false]) => h("option", { key: value, value, disabled }, text))));
+    const budgetLabel = kind === "rent" ? "Budget · LKR thousands / month" : kind === "monthly" ? "Monthly payment · LKR thousands" : "Budget · LKR millions";
     return h(
       "div",
       { id: "dh-home", className: "dh-home" },
-      h(
-        "section",
-        { className: "dh-hero", "aria-labelledby": "dh-motto" },
+      h("section", { className: "dh-hero", "aria-labelledby": "dh-motto" },
         h("img", {
           className: "dh-hero-photo",
           src: "./assets/colombo-condo-hero.png",
           alt: "A golden-hour Colombo condominium interior overlooking the skyline, with a couple and their realtor on the right",
-          fetchPriority: "high",
-          width: 1671,
-          height: 941,
+          fetchPriority: "high", width: 1671, height: 941,
         }),
-        h(
-          "div",
-          { className: "dh-hero-content" },
-          h(
-            "p",
-            { className: "dh-eyebrow" },
-            "Sri Lanka’s Premier Apartment & Condo Marketplace",
-          ),
+        h("div", { className: "dh-hero-content" },
           h("h1", { id: "dh-motto" }, "A Higher Way Home."),
-          h(
-            "p",
-            { className: "dh-intro" },
-            "Room to breathe. A city to call home. Discover Sri Lankan apartments and condominiums, starting with Colombo.",
-          ),
-          h(
-            "form",
-            {
-              className: "dh-home-search",
-              onSubmit: search,
-              "aria-label": "Find a home",
-            },
-            h(
-              "div",
-              { className: "dh-search-top" },
-              h(
-                "div",
-                {
-                  className: "dh-mode",
-                  role: "group",
-                  "aria-label": "Buy or rent",
-                },
-                ["buy", "rent"].map((mode) =>
-                  button(
-                    mode === "buy" ? "Buy" : "Rent",
-                    () => {
-                      setPurpose(mode);
-                      setMinPrice("");
-                      setMaxPrice("");
-                      setLocation("");
-                    },
-                    "dh-mode-button",
-                    { key: mode, "aria-pressed": purpose === mode },
-                  ),
-                ),
-              ),
-              h("span", { className: "dh-ai-label" }, "✧ AI-assisted search"),
-            ),
-            h(
-              "label",
-              { htmlFor: "dh-ai-prompt", className: "dh-prompt-label" },
-              "Describe the apartment you’re looking for.",
-            ),
-            h("textarea", {
-              id: "dh-ai-prompt",
-              rows: 2,
-              value: brief,
-              onChange: (event) => setBrief(event.target.value),
-              maxLength: 1200,
-              placeholder:
-                "A quiet two-bedroom apartment in Colombo, close to work…",
-              "aria-describedby": "dh-ai-status",
-            }),
-            h(
-              "p",
-              { id: "dh-ai-status", className: "dh-search-note" },
-              "Plan your search here. AI matching is not connected yet; this note stays on this page and is not used to filter listings. Use the filters below to explore homes.",
-            ),
-            purpose === "rent" &&
-              h(
-                "p",
-                { className: "dh-rental-note", role: "status" },
-                "Budgets and price sorting use LKR per month. Other billing periods use approximate monthly equivalents; each card keeps its actual period. Short-stay dates still need owner or agency confirmation.",
-              ),
-            h(
-              "div",
-              { className: "dh-filter-grid" },
-              h(
-                "label",
-                { htmlFor: "dh-location" },
-                "Location",
-                h("input", {
-                  id: "dh-location",
-                  type: "search",
-                  value: location,
-                  list: "dh-location-options",
-                  autoComplete: "off",
-                  maxLength: 80,
-                  placeholder: "Search area, e.g. Colombo 07 or Galle",
-                  "aria-label": "Location",
-                  onChange: (event) => setLocation(event.target.value),
-                }),
-                h(
-                  "datalist",
-                  { id: "dh-location-options" },
-                  locationSuggestions(cities).map((place) =>
-                    h("option", { key: place, value: place }),
-                  ),
-                ),
-              ),
-              select("dh-beds", "Bedrooms", bedrooms, setBedrooms, [
-                ["any", "Any bedrooms"],
-                ["1", "1+ bedrooms"],
-                ["2", "2+ bedrooms"],
-                ["3", "3+ bedrooms"],
-                ["4", "4+ bedrooms"],
-              ]),
-              select(
-                "dh-type",
-                "Property type",
-                category,
-                setCategory,
-                types.map((key) => {
-                  const supported =
-                    key === "all" ||
-                    key === "apartment" ||
-                    inventory.some((p) => p.category === key);
-                  return [
-                    key,
-                    (key === "all" ? "All residential homes" : labels[key]) +
-                      (supported ? "" : " · no listings yet"),
-                    !supported,
-                  ];
-                }),
-              ),
-            ),
-            h("fieldset", { className: "dh-price-range", "aria-describedby": budgetProblem ? "dh-budget-error" : "dh-budget-summary" },
-              h("legend", null, kind === "rent" ? "Your budget · LKR thousands / month" : kind === "monthly" ? "Your monthly payment · LKR thousands / month" : "Your budget · LKR millions"),
-              purpose === "buy" && h("div", { className: "dh-budget-mode", role: "group", "aria-label": "Budget type" },
-                [["total", "Total budget"], ["monthly", "Monthly payment"]].map(([mode, label]) => button(label, () => { setBudgetMode(mode); setMinPrice(""); setMaxPrice(""); },
-                  "dh-budget-mode-button", { key: mode, "aria-pressed": budgetMode === mode }))),
-              h("div", { className: "dh-budget-presets", role: "group", "aria-label": "Budget presets" },
-                budgetPresets(kind).map(preset => button(preset.label, () => { setMinPrice(preset.min); setMaxPrice(preset.max); }, "dh-property-tab", {
-                  key: preset.id, "aria-pressed": activePreset === preset.id,
-                }))),
-              h("div", { className: "dh-price-summary" },
-                h("output", { id: "dh-budget-summary", "aria-live": "polite", "aria-atomic": true }, budgetSummary(minPrice, maxPrice, kind)),
-                button("Reset", () => { setMinPrice(""); setMaxPrice(""); }, "dh-price-reset", { "aria-label": "Reset budget" })),
-              h("div", { className: "dh-price-controls" },
-                h("div", null, h("label", { htmlFor: "dh-min-price" }, kind === "rent" || kind === "monthly" ? "Minimum (thousands / month)" : "Minimum (millions)"),
-                  h("input", { id: "dh-min-price", type: "number", min: 0, step: "any", inputMode: "decimal", value: minPrice, placeholder: "Any minimum",
-                    "aria-invalid": !!budgetProblem, "aria-describedby": budgetProblem ? "dh-budget-error" : "dh-budget-summary", onChange: e => setMinPrice(e.target.value) })),
-                h("div", null, h("label", { htmlFor: "dh-max-price" }, kind === "rent" || kind === "monthly" ? "Maximum (thousands / month)" : "Maximum (millions)"),
-                  h("input", { id: "dh-max-price", type: "number", min: 0, step: "any", inputMode: "decimal", value: maxPrice, placeholder: "No maximum",
-                    "aria-invalid": !!budgetProblem, "aria-describedby": budgetProblem ? "dh-budget-error" : "dh-budget-summary", onChange: e => setMaxPrice(e.target.value) }))),
-              budgetProblem ? h("p", { id: "dh-budget-error", className: "dh-budget-error", role: "alert" }, budgetProblem) :
-                h("p", { className: "dh-budget-count", role: "status", "aria-live": "polite" }, `${shown.length} matching listing${shown.length === 1 ? "" : "s"}${purpose === "rent" ? " · monthly price comparison" : ""}`),
-              kind === "monthly" && h("p", { className: "dh-search-note" }, "Estimated home-loan payment with 20% down, 12% interest over 20 years. A rough guide, not a loan offer."),
-              h("p", { className: "dh-search-note" }, "Leave either field empty for no limit. “Under” excludes its upper limit; other ranges include both limits.")),
-            h(
-              "button",
-              { type: "submit", className: "dh-button dh-search-submit", disabled: !!budgetProblem },
-              "Explore listings",
-            ),
-          ),
-        ),
-      ),
-      h(Featured, { purpose, sortBy, onSort: setSortBy }),
-      h(
-        "section",
-        {
-          className: "dh-section",
-          id: "dh-listings",
-          "aria-labelledby": "dh-listings-title",
-        },
-        h(
-          "div",
-          { className: "dh-section-heading" },
-          h(
-            "div",
-            null,
-            h("p", { className: "dh-eyebrow" }, "A place to begin"),
-            h("h2", { id: "dh-listings-title" }, "Find your kind of home."),
-          ),
-        ),
-        h(
-          "div",
-          { className: "dh-listings-toolbar" },
-          h(
-            "div",
-            { className: "dh-toolbar-actions" },
-            button(
-              `Saved only (${inventory.filter((p) => store.isPropertySaved(p.id)).length})`,
-              () => setSavedOnly((value) => !value),
-              "dh-property-tab",
-              { "aria-pressed": savedOnly },
-            ),
-            button("More filters & map", event => search(event, true), "dh-property-tab", { disabled: !!budgetProblem }),
-            button(
-              "Reset filters",
-              () => {
-                setLocation("");
-                setMinPrice("");
-                setMaxPrice("");
-                setBedrooms("any");
-                setCategory("apartment");
-                setSavedOnly(false);
-                setSortBy("newest");
-              },
-              "dh-property-tab",
-            ),
-          ),
-        ),
-        h(ResultsBar, { id: "dh-sort", count: shown.length, sortBy, onSort: setSortBy, purpose, invalid: !!budgetProblem }),
-        h(
-          "div",
-          {
-            className: "dh-property-grid",
-          },
-          shown.map((p) => h(PropertyCard, { key: p.id, property: p })),
-        ),
-        !shown.length &&
-          h(
-            "p",
-            { className: "dh-empty" },
-            budgetProblem ? "Correct the budget above to view matching homes." : "No matching homes in the current inventory. Try another location, budget or property type.",
-          ),
-        store.comparePropertyIds.length > 0 &&
-          button("Open comparison", () => go(store, "compare")),
-      ),
-      h(
-        "section",
-        { className: "dh-section dh-journeys", id: "dh-journeys" },
-        h("p", { className: "dh-eyebrow" }, "A little guidance, at every step"),
-        h("h2", null, "Move forward with clarity."),
-        h(
-          "div",
-          { className: "dh-journey-grid" },
-          h(
-            "article",
-            null,
-            h("h3", null, "For buyers & renters"),
-            steps([
-              [
-                "Set your goals & expectations",
-                "Start with how you want to live: your move date, commute, budget and must-haves. For rentals, decide whether you need a short stay or a longer lease.",
-              ],
-              [
-                "Find suitable matches",
-                "Use location, budget, bedrooms and property type to narrow the existing listings. Save suitable homes and compare the details side by side.",
-              ],
-              [
-                "Talk to the agency",
-                "Ask about availability, fees and anything the listing does not explain.",
-              ],
-              [
-                "Request a viewing",
-                "Open the property details to enquire or request a virtual viewing. The agency confirms the arrangements.",
-              ],
-            ]),
-            h(
-              "a",
-              { href: "#dh-listings", className: "dh-text-button" },
-              "Explore homes →",
-            ),
-          ),
-          h(
-            "article",
-            null,
-            h("h3", null, "For owners & listing agents"),
-            steps([
-              [
-                "Add property details",
-                "Enter the location, price, specifications and features accurately.",
-              ],
-              [
-                "Prepare your photos",
-                "Choose a clear cover from your actual property photos. Keep walls straight, show useful room angles and upload your photo through the existing form.",
-              ],
-              [
-                "Review & submit",
-                "Check your description, details and image before using the final publish step.",
-              ],
-              [
-                "Follow the listing",
-                "Use the Agency Portal to review locally stored listings and enquiries. Submission status tracking is not connected yet.",
-              ],
-            ]),
-            button(
-              "Start your listing →",
-              () => go(store, "list-property"),
-              "dh-text-button",
-            ),
-          ),
-        ),
-      ),
-      h(AgentStrip),
+          h("p", { className: "dh-intro" }, "Verified apartments and homes in Sri Lanka, starting with Colombo."),
+          h("form", { className: "dh-home-search", onSubmit: search, "aria-label": "Find a home" },
+            h("div", { className: "dh-mode", role: "group", "aria-label": "Buy or rent" },
+              ["buy", "rent"].map((mode) => button(mode === "buy" ? "Buy" : "Rent", () => {
+                setPurpose(mode); setMinPrice(""); setMaxPrice(""); setLocation("");
+              }, "dh-mode-button", { key: mode, "aria-pressed": purpose === mode }))),
+            h("div", { className: "dh-search-row" },
+              h("label", { htmlFor: "dh-location" }, "Location",
+                h("input", { id: "dh-location", type: "search", value: location, list: "dh-location-options", autoComplete: "off", maxLength: 80,
+                  placeholder: "Colombo 07, Rajagiriya…", "aria-label": "Location", onChange: (event) => setLocation(event.target.value) }),
+                h("datalist", { id: "dh-location-options" }, locationSuggestions(cities).map((place) => h("option", { key: place, value: place })))),
+              select("dh-beds", "Bedrooms", bedrooms, setBedrooms, [["any", "Any"], ["1", "1+"], ["2", "2+"], ["3", "3+"], ["4", "4+"]]),
+              h("button", { type: "submit", className: "dh-button dh-search-submit", disabled: !!budgetProblem },
+                budgetProblem ? "Check budget" : "Search")),
+            h("div", { className: "dh-budget-presets", role: "group", "aria-label": budgetLabel },
+              budgetPresets(kind).map(preset => button(preset.label, () => {
+                const on = activePreset === preset.id; setMinPrice(on ? "" : preset.min); setMaxPrice(on ? "" : preset.max);
+              }, "dh-chip", { key: preset.id, "aria-pressed": activePreset === preset.id }))),
+            budgetProblem && h("p", { id: "dh-budget-error", className: "dh-budget-error", role: "alert" }, budgetProblem),
+            // Everything a careful searcher may want, out of the way until asked for.
+            h("details", { className: "dh-more-filters" },
+              h("summary", null, "More filters"),
+              h("div", { className: "dh-more-filters-body" },
+                select("dh-type", "Property type", category, setCategory, types.map((key) => {
+                  const supported = key === "all" || key === "apartment" || inventory.some((p) => p.category === key);
+                  return [key, (key === "all" ? "All residential homes" : labels[key]) + (supported ? "" : " · no listings yet"), !supported];
+                })),
+                purpose === "buy" && h("div", { className: "dh-budget-mode", role: "group", "aria-label": "Budget type" },
+                  [["total", "Total price"], ["monthly", "Monthly payment"]].map(([mode, label]) => button(label, () => { setBudgetMode(mode); setMinPrice(""); setMaxPrice(""); },
+                    "dh-chip", { key: mode, "aria-pressed": budgetMode === mode }))),
+                h("fieldset", { className: "dh-price-range", "aria-describedby": budgetProblem ? "dh-budget-error" : "dh-budget-summary" },
+                  h("legend", null, budgetLabel),
+                  h("div", { className: "dh-price-controls" },
+                    h("div", null, h("label", { htmlFor: "dh-min-price" }, "Minimum"),
+                      h("input", { id: "dh-min-price", type: "number", min: 0, step: "any", inputMode: "decimal", value: minPrice, placeholder: "Any",
+                        "aria-invalid": !!budgetProblem, onChange: e => setMinPrice(e.target.value) })),
+                    h("div", null, h("label", { htmlFor: "dh-max-price" }, "Maximum"),
+                      h("input", { id: "dh-max-price", type: "number", min: 0, step: "any", inputMode: "decimal", value: maxPrice, placeholder: "Any",
+                        "aria-invalid": !!budgetProblem, onChange: e => setMaxPrice(e.target.value) }))),
+                  h("output", { id: "dh-budget-summary", className: "dh-search-note", "aria-live": "polite", "aria-atomic": true }, budgetSummary(minPrice, maxPrice, kind))),
+                kind === "monthly" && h("p", { className: "dh-search-note" }, "Estimated home-loan payment with 20% down, 12% interest over 20 years. A rough guide, not a loan offer."),
+                purpose === "rent" && h("p", { className: "dh-search-note" }, "Prices compare per month. Short stays need the owner or agency to confirm dates."),
+                h("div", { className: "dh-more-actions" },
+                  button(`Saved only (${savedCount})`, () => setSavedOnly((value) => !value), "dh-chip", { "aria-pressed": savedOnly }),
+                  button("Map & advanced search", event => search(event, true), "dh-chip", { disabled: !!budgetProblem }),
+                  button("Reset", resetAll, "dh-chip"))))))),
       h(OwnerFeed),
+      h(AreaTiles, { inventory: available, onPick: (city) => { setLocation(city); setCategory("all"); setTimeout(toListings, 0); } }),
+      h("section", { className: "dh-section", id: "dh-listings", "aria-labelledby": "dh-listings-title" },
+        h("div", { className: "dh-section-heading" },
+          h("h2", { id: "dh-listings-title" }, purpose === "rent" ? "Homes to rent" : "Homes for sale")),
+        h(ResultsBar, { id: "dh-sort", count: shown.length, sortBy, onSort: setSortBy, purpose, invalid: !!budgetProblem }),
+        h("div", { className: "dh-property-grid" }, shown.map((p) => h(PropertyCard, { key: p.id, property: p }))),
+        !shown.length && h("p", { className: "dh-empty" },
+          budgetProblem ? "Correct the budget above to view matching homes." : "No homes match yet. Try another area or budget.",
+          " ", button("Clear filters", resetAll, "dh-text-button")),
+        store.comparePropertyIds.length > 0 && button("Open comparison", () => go(store, "compare"))),
+      h("section", { className: "dh-section dh-how", id: "dh-journeys", "aria-labelledby": "dh-how-title" },
+        h("h2", { id: "dh-how-title" }, "How it works"),
+        h("ol", { className: "dh-how-steps" }, [
+          ["search", "Search", "Pick an area and budget."],
+          ["enquire", "Enquire", "Ask through DwellHunt. We check every lister."],
+          ["view", "View online", "Book a virtual viewing with the agent."],
+        ].map(([key, title, text]) => h("li", { key }, h("span", { className: "dh-how-icon" }, icon(STEP_ICONS[key])), h("strong", null, title), h("p", null, text)))),
+        h("p", { className: "dh-how-owners" }, "Own a home or work as an agent? ",
+          button("List a property →", () => go(store, "list-property"), "dh-text-button"))),
+      h(AgentStrip),
       h(AgentProfileOverlay),
-      h(
-        "section",
-        {
-          className: "dh-vision",
-          "aria-labelledby": "dh-vision-title",
-        },
-        h(
-          "div",
-          { className: "dh-vision-panel" },
-          h("p", { className: "dh-vision-brand" }, "DwellHunt"),
-          h(
-            "h2",
-            { id: "dh-vision-title", className: "dh-vision-tagline" },
-            "A Higher Way Home.",
-          ),
-          h(
-            "div",
-            { className: "dh-vision-block" },
-            h("h3", null, "Our Vision"),
-            h(
-              "p",
-              null,
-              "To become Sri Lanka’s most trusted marketplace for apartment and condominium living.",
-            ),
-          ),
-          h(
-            "div",
-            { className: "dh-vision-block" },
-            h("h3", null, "Our Mission"),
-            h(
-              "p",
-              null,
-              "To connect people with the right homes through accurate listings, thoughtful guidance and seamless property journeys.",
-            ),
-          ),
-        ),
-      ),
-      h(
-        "section",
-        { className: "dh-section dh-closing" },
-        h("p", { className: "dh-eyebrow" }, "Your next chapter"),
-        h("h2", null, "Take the next step at your pace."),
-        button(
-          "Explore homes",
-          () => document.getElementById("dh-listings").scrollIntoView(),
-          "dh-button",
-        ),
-        button("Agency Portal", () => go(store, "dashboard"), "dh-text-button"),
-      ),
+      h("section", { className: "dh-vision", "aria-labelledby": "dh-vision-title" },
+        h("div", { className: "dh-vision-panel" },
+          h("h2", { id: "dh-vision-title", className: "dh-vision-brand" }, "DwellHunt"),
+          h("div", { className: "dh-vision-block" }, h("h3", null, "Our Vision"),
+            h("p", null, "To become Sri Lanka’s most trusted marketplace for apartment and condominium living.")),
+          h("div", { className: "dh-vision-block" }, h("h3", null, "Our Mission"),
+            h("p", null, "To connect people with the right homes through accurate listings, thoughtful guidance and seamless property journeys."))))
     );
   }
   function Footer() {

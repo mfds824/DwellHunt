@@ -1079,7 +1079,7 @@
   cursor: pointer;
 }
 
-/* Header agency badge: shorten to "by ZentroX" on narrow phones so the Menu button stays on the same row. */
+/* Header agency badge: shorten to "by Ophiola" on narrow phones so the Menu button stays on the same row. */
 @media (max-width: 479px) {
   .dh-zx-prefix { display: none; }
 }
@@ -1090,3 +1090,72 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* ---- Calm homepage (fewer words, one job per section) ---- */
+.dh-home-search .dh-mode { display: inline-flex; margin-bottom: 14px; }
+.dh-search-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 10px; align-items: end; }
+.dh-search-row label { display: block; font-size: 11px; font-weight: 700; color: #385246; min-width: 0; }
+.dh-search-row input, .dh-search-row select, .dh-more-filters select {
+  display: block; width: 100%; min-width: 0; min-height: 46px; margin-top: 4px; padding: 10px 12px;
+  background: #fff; color: #244b3d; border: 1px solid #cdd9ce; border-radius: 11px; font: inherit; font-size: 14px;
+}
+.dh-search-row .dh-search-submit { grid-column: 1 / -1; margin-top: 4px; min-height: 48px; }
+.dh-budget-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.dh-chip {
+  min-height: 38px; padding: 7px 13px; border-radius: 999px; border: 1px solid #d8e1da; background: #fff;
+  color: #345446; font: inherit; font-size: 12px; font-weight: 650; cursor: pointer;
+}
+.dh-chip:hover { border-color: #9cbfaa; }
+.dh-chip[aria-pressed="true"] { background: #064e3b; border-color: #064e3b; color: #fff; }
+.dh-chip:disabled { opacity: .5; cursor: not-allowed; }
+.dh-more-filters { margin-top: 12px; border-top: 1px solid #eef1ee; padding-top: 10px; }
+.dh-more-filters summary { cursor: pointer; font-size: 13px; font-weight: 700; color: #064e3b; list-style: none; padding: 6px 0; }
+.dh-more-filters summary::-webkit-details-marker { display: none; }
+.dh-more-filters summary::after { content: " +"; }
+.dh-more-filters[open] summary::after { content: " –"; }
+.dh-more-filters-body { display: grid; gap: 12px; padding-top: 8px; }
+.dh-more-filters-body > label { display: block; font-size: 11px; font-weight: 700; color: #385246; }
+.dh-more-filters .dh-price-range { margin: 0; }
+.dh-more-filters .dh-search-note { margin: 4px 0 0; }
+.dh-budget-mode, .dh-more-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.dh-property-facts { margin: 6px 0 0; font-size: 13px; color: #50665a; }
+.dh-home .dh-property-body h3 { margin-top: 4px; }
+.dh-home .dh-address { margin-top: 2px; }
+
+.dh-areas h2, .dh-how h2 { margin: 0 0 20px; }
+.dh-area-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.dh-area-tile {
+  position: relative; display: block; padding: 0; border: 0; border-radius: 18px; overflow: hidden; cursor: pointer;
+  aspect-ratio: 4 / 3; background: #dfe8e1; color: #fff; text-align: left; font: inherit;
+}
+.dh-area-tile img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s ease; }
+.dh-area-tile:hover img, .dh-area-tile:focus-visible img { transform: scale(1.04); }
+.dh-area-tile > span {
+  position: absolute; inset: auto 0 0 0; display: grid; gap: 2px; padding: 34px 14px 12px;
+  background: linear-gradient(180deg, transparent, rgba(6, 30, 22, .72));
+}
+.dh-area-tile strong { font-size: 16px; }
+.dh-area-tile small { font-size: 12px; opacity: .9; }
+
+.dh-how-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.dh-how-steps li { display: grid; grid-template-columns: 52px 1fr; column-gap: 14px; align-items: center; }
+.dh-how-icon { grid-row: span 2; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: #e8f1ea; color: #064e3b; }
+.dh-how-steps strong { font-size: 16px; color: #172e25; }
+.dh-how-steps p { margin: 0; font-size: 14px; }
+.dh-how-owners { margin: 22px 0 0; font-size: 14px; }
+
+@media (min-width: 700px) {
+  .dh-search-row { grid-template-columns: minmax(0, 1fr) 110px auto; }
+  .dh-search-row .dh-search-submit { grid-column: auto; margin-top: 0; padding-inline: 22px; }
+  .dh-area-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dh-how-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  .dh-how-steps li { grid-template-columns: 1fr; row-gap: 10px; align-items: start; }
+  .dh-how-icon { grid-row: auto; }
+}
+/* Sections settle in gently as they scroll into view, where the browser supports it. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .dh-home > section:not(.dh-hero) { animation: dh-settle linear both; animation-timeline: view(); animation-range: entry 0% entry 40%; }
+  }
+}
+@keyframes dh-settle { from { opacity: .001; transform: translateY(18px); } to { opacity: 1; transform: none; } }
