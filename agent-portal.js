@@ -30,7 +30,7 @@ export function agentMessage(code) {
   })[code] || 'Something went wrong on our side. Please try again in a few minutes, or message us on WhatsApp.';
 }
 
-const RETRYABLE = new Set(['verify', 'me', 'signout', 'profile', 'posts', 'posts/delete']);
+const RETRYABLE = new Set(['verify', 'me', 'signout', 'profile', 'posts', 'posts/delete', 'telegram']);
 /** POSTs to an agent route and returns the JSON body. Calls without a one-time human-check token are retried
  * a few times when the backend is briefly busy. Throws an Error whose message is safe to show. */
 export async function agentCall(path, body, fetchImpl = fetch, pause = ms => new Promise(r => setTimeout(r, ms))) {
@@ -306,14 +306,35 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
         h('button', { type: 'button', className: 'dh-agent-link', disabled: busy === p.id, onClick: () => remove(p.id) }, busy === p.id ? 'Deleting…' : 'Delete')))));
   }
 
+  /** "Connect Telegram": a one-time link to the DwellHunt Agents bot, shown only once that bot is set up. */
+  function TelegramConnect({ session, telegram }) {
+    const [state, setState] = React.useState({ busy: false, link: '', message: '' });
+    if (!telegram || !telegram.available) return null;
+    const getLink = reconnect => {
+      setState({ busy: true, link: '', message: '' });
+      agentCall('telegram', { session: session.session, reconnect })
+        .then(r => setState({ busy: false, link: r.link || '', message: r.status === 'connected' ? 'Telegram is already connected.' : r.link ? '' : 'Telegram is not available right now.' }))
+        .catch(error => setState({ busy: false, link: '', message: error.message }));
+    };
+    return h('div', { className: 'dh-agent-telegram' },
+      h('p', null, telegram.connected ? '✅ Telegram connected. New enquiries and listing updates arrive in the DwellHunt Agents bot.'
+        : 'Get new enquiries instantly in Telegram, with buttons to record what happened, plus listing approvals and renewal reminders.'),
+      state.link
+        ? h('a', { className: primary, href: state.link, target: '_blank', rel: 'noopener noreferrer' }, 'Open Telegram to connect')
+        : h('button', { type: 'button', className: telegram.connected ? 'dh-agent-link' : secondary, disabled: state.busy, onClick: () => getLink(telegram.connected) },
+            state.busy ? 'Getting your link…' : telegram.connected ? 'Connect a different Telegram account' : 'Connect Telegram'),
+      state.link && h('p', { className: 'dh-agent-meta' }, 'Tap Start in Telegram. The link works once and expires in 7 days.'),
+      state.message && h('p', { className: 'dh-agent-meta', role: 'status' }, state.message));
+  }
+
   function Dashboard({ session, onCreate, onSignedOut }) {
-    const [data, setData] = React.useState({ loading: true, listings: [], posts: [], profile: null, message: '' });
+    const [data, setData] = React.useState({ loading: true, listings: [], posts: [], profile: null, telegram: null, message: '' });
     const [tick, setTick] = React.useState(0);
     const refresh = () => setTick(t => t + 1);
     React.useEffect(() => {
       let live = true;
       agentCall('me', { session: session.session })
-        .then(r => { if (live) setData({ loading: false, listings: r.listings || [], posts: r.posts || [], profile: r.profile || { bio: '', areas: [], logo: '' }, message: '' }); })
+        .then(r => { if (live) setData({ loading: false, listings: r.listings || [], posts: r.posts || [], profile: r.profile || { bio: '', areas: [], logo: '' }, telegram: r.telegram || null, message: '' }); })
         .catch(error => { if (!live) return; if (error.code === 'SIGNED_OUT') { clearAgentSession(); onSignedOut(); } else setData(o => ({ ...o, loading: false, message: error.message })); });
       return () => { live = false; };
     }, [session.session, tick]);
@@ -327,6 +348,7 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
           h('div', { className: 'dh-agent-dash-actions' },
             h('button', { type: 'button', className: primary, onClick: onCreate }, '+ New listing'),
             h('button', { type: 'button', className: secondary, onClick: signOut }, 'Sign out'))),
+        !data.loading && h(TelegramConnect, { session, telegram: data.telegram }),
         h('h2', { className: 'dh-agent-h2' }, 'Your listings'),
         data.loading ? h('p', { className: 'dh-agent-lead', role: 'status' }, 'Loading your listings…')
           : data.message ? h('p', { role: 'alert', className: 'dh-agent-error' }, data.message)

@@ -84,3 +84,7 @@
 .dh-agent-logo { width: 56px; height: 56px; border-radius: 50%; background: #d1fae5; color: #064e3b; display: grid; place-items: center; font-weight: 900; overflow: hidden; }
 .dh-agent-logo img { width: 100%; height: 100%; object-fit: cover; }
 .dh-agent-post-photo { width: 96px; height: 72px; object-fit: cover; border-radius: 10px; }
+
+.dh-agent-telegram { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 14px 0 4px; padding: 12px 14px; border-radius: 12px; background: #eef6f1; }
+.dh-agent-telegram > p:first-child { flex: 1 1 260px; margin: 0; font-size: 14px; color: #1c2b24; }
+.dh-agent-telegram .dh-agent-meta { flex-basis: 100%; margin: 0; }
