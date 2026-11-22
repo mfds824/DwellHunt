@@ -26,7 +26,8 @@
 
 /* Two columns: details and a sticky contact card. */
 .dh-lp-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 40px; margin-top: 24px; align-items: start; }
-.dh-lp-aside { position: sticky; top: 76px; }
+/* Pinned while scrolling, but never taller than the screen: a long form (the video booking) scrolls inside it. */
+.dh-lp-aside { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .dh-lp-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 6px; font-weight: 800; font-size: 14px; }
 .dh-lp-dot { width: 10px; height: 10px; border-radius: 50%; background: #047857; box-shadow: 0 0 0 3px #d1fae5; }
 .dh-lp-pill { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 10px; background: #f1f5f2; color: #3f5148; }
@@ -122,7 +123,7 @@
 
 @media (max-width: 900px) {
   .dh-lp-grid { grid-template-columns: 1fr; gap: 0; }
-  .dh-lp-aside { position: static; margin-top: 28px; }
+  .dh-lp-aside { position: static; margin-top: 28px; max-height: none; overflow: visible; }
 }
 @media (max-width: 640px) {
   .dh-lp-wrap { padding: 0 0 96px; }

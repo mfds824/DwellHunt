@@ -2,7 +2,8 @@ import { COUNTRY_CODES } from './country-calling-codes.js';
 
 export function createCountryCodePicker(React) {
   const h = React.createElement;
-  return function CountryCodePicker({ country, code, onSelect, error, idPrefix = 'dh-owner', label = 'Country code', searchLabel = 'Search country or calling code' }) {
+  return function CountryCodePicker({ country, code, onSelect, error, idPrefix = 'dh-owner', label = 'Country code', searchLabel = 'Search country or calling code',
+    hint = 'Choose your country or enter a code manually.', required = true }) {
     const optionPrefix = idPrefix === 'dh-owner' ? 'dh-country' : `${idPrefix}-country`;
     const [open, setOpen] = React.useState(false);
     const [query, setQuery] = React.useState('');
@@ -10,7 +11,9 @@ export function createCountryCodePicker(React) {
     const trigger = React.useRef(null), search = React.useRef(null), list = React.useRef(null);
     const selected = COUNTRY_CODES.find(item => item.iso === country && item.code === code);
     const term = query.trim().toLocaleLowerCase();
-    const matches = COUNTRY_CODES.filter(item => !term || `${item.name} ${item.code} ${item.iso}`.toLocaleLowerCase().includes(term));
+    const found = COUNTRY_CODES.filter(item => !term || `${item.name} ${item.code} ${item.iso}`.toLocaleLowerCase().includes(term));
+    // Sri Lanka is always recommended: pinned first in the full list (a search still finds every country).
+    const matches = term ? found : [...found.filter(item => item.iso === 'LK'), ...found.filter(item => item.iso !== 'LK')];
     const options = [...matches, { iso: 'manual', name: 'Enter a country code manually', code: '' }];
     const choose = item => {
       onSelect(item.iso, item.iso === 'manual' ? code : item.code);
@@ -30,7 +33,7 @@ export function createCountryCodePicker(React) {
     return h('div', { className: 'dh-country-picker dh-owner-field', onBlur: event => {
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
     } },
-      h('label', { id: `${idPrefix}-country-label`, htmlFor: `${idPrefix}-country-picker`, className: 'block text-xs font-bold text-stone-700 mb-2' }, `${label} (required)`),
+      h('label', { id: `${idPrefix}-country-label`, htmlFor: `${idPrefix}-country-picker`, className: 'block text-xs font-bold text-stone-700 mb-2' }, required ? `${label} (required)` : label),
       h('button', {
         id: `${idPrefix}-country-picker`, ref: trigger, type: 'button', className: 'dh-country-trigger',
         'aria-labelledby': `${idPrefix}-country-label ${idPrefix}-country-value`, 'aria-haspopup': 'listbox', 'aria-expanded': open,
@@ -54,9 +57,10 @@ export function createCountryCodePicker(React) {
             'data-option-index': index, className: `dh-country-option${index === active ? ' dh-country-option-active' : ''}`,
             onMouseDown: event => event.preventDefault(), onClick: () => choose(item), onMouseMove: () => setActive(index),
           }, item.flag && h('img', { src: item.flag, alt: '', className: 'dh-country-flag', loading: 'lazy' }),
-          h('span', { className: 'dh-country-name' }, item.name), h('span', { className: 'dh-country-code' }, item.code)))),
+          h('span', { className: 'dh-country-name' }, item.name, item.iso === 'LK' && !term ? h('span', { className: 'dh-country-tag' }, 'Recommended') : null),
+          h('span', { className: 'dh-country-code' }, item.code)))),
         h('p', { role: 'status', className: 'dh-owner-hint' }, `${matches.length} ${matches.length === 1 ? 'country' : 'countries'} found`)),
-      h('p', { id: `${idPrefix}-country-hint`, className: 'dh-owner-hint' }, 'Choose your country or enter a code manually.'),
+      h('p', { id: `${idPrefix}-country-hint`, className: 'dh-owner-hint' }, hint),
       error && h('p', { id: `${idPrefix}-country-error`, className: 'dh-owner-error' }, error));
   };
 }

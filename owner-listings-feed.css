@@ -58,3 +58,7 @@
 .dh-vb-picked { margin: 0; font-size: 13px; font-weight: 700; color: #047857; }
 .dh-vb .dh-ol-enquiry-viewing span { white-space: normal; }
 .dh-vb-back { justify-self: start; font-size: 13px; }
+.dh-vb-phone { display: grid; grid-template-columns: minmax(110px, 140px) 1fr; gap: 10px; align-items: start; }
+.dh-vb-phone .dh-country-picker label { font-size: 12px; margin-bottom: 4px; }
+.dh-vb-phone .dh-owner-hint { margin: 4px 0 0; font-size: 11px; color: #50665a; }
+@media (max-width: 380px) { .dh-vb-phone { grid-template-columns: 1fr; } }

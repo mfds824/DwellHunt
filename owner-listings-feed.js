@@ -1,6 +1,7 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
 import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261123-vb1";
+import { createCountryCodePicker } from "./country-code-picker.js?v=20261123-cc1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
 const safeImage = url => typeof url === 'string' && /^https:\/\/res\.cloudinary\.com\//.test(url) ? url : '';
@@ -69,10 +70,15 @@ export const VR_QUESTIONS = (sale) => [
   ['budget', 'Does the price fit your budget?', [['yes', 'Yes'], ['close', 'It is close'], ['no', 'It is above my budget']]],
   ['visit', 'Before paying anything, can you or someone you trust visit in person?', [['yes', 'Yes, I can'], ['someone', 'Someone can go for me'], ['no', 'No']]],
 ];
+/** "+94" and "077 123 4567" become "+94771234567": spaces dropped, and a leading 0 of the local number too. */
+export function whatsappNumber(code, number) {
+  const local = String(number || '').replace(/\D/g, '').replace(/^0+/, '');
+  return local ? String(code || '').replace(/[^\d+]/g, '') + local : '';
+}
 export function videoRequestPayload(l, f, zone) {
   const sale = l.purpose === 'buy', answers = { timeline: f.timeline, budget: f.budget, visit: f.visit };
   answers[sale ? 'payment' : 'occupants'] = sale ? f.payment : f.occupants;
-  return { reference: l.reference, slot: f.slot, name: f.name.trim(), email: f.email.trim(), whatsapp: f.whatsapp.trim(), timezone: zone,
+  return { reference: l.reference, slot: f.slot, name: f.name.trim(), email: f.email.trim(), whatsapp: whatsappNumber(f.code, f.whatsapp), timezone: zone,
     answers, message: f.message.trim(), rules: f.rules === true, consent: f.consent === true, website: f.website || '' };
 }
 const slotCache = {};
@@ -98,11 +104,12 @@ const VR_ERRORS = { SLOT_TAKEN: 'Sorry, that time was just taken. Please pick an
 
 export function createVideoBooking(React) {
   const h = React.createElement;
+  const CountryCodePicker = createCountryCodePicker(React);
   return function VideoBooking({ listing: l, slots, onBack }) {
     const sale = l.purpose === 'buy', zone = buyerTimeZone(), colombo = zone === 'Asia/Colombo';
     const days = React.useMemo(() => groupSlots(slots, zone), [slots, zone]);
     const [day, setDay] = React.useState(0);
-    const [f, setF] = React.useState({ slot: '', name: '', email: '', whatsapp: '', timeline: '', payment: '', occupants: '', budget: '', visit: '', message: '', rules: false, consent: false });
+    const [f, setF] = React.useState({ slot: '', name: '', email: '', country: 'LK', code: '+94', whatsapp: '', timeline: '', payment: '', occupants: '', budget: '', visit: '', message: '', rules: false, consent: false });
     const [state, setState] = React.useState({ phase: 'idle', message: '' });
     const honeypot = React.useRef(null);
     const set = key => event => setF(old => ({ ...old, [key]: key === 'rules' || key === 'consent' ? event.target.checked : event.target.value }));
@@ -111,7 +118,7 @@ export function createVideoBooking(React) {
       event.preventDefault();
       const questions = VR_QUESTIONS(sale);
       if (!f.slot) { setState({ phase: 'error', message: 'Please choose a time.' }); return; }
-      if (!f.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()) || f.whatsapp.replace(/\D/g, '').length < 8) { setState({ phase: 'error', message: 'Please add your name, email and WhatsApp number with the country code.' }); return; }
+      if (!f.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()) || whatsappNumber(f.code, f.whatsapp).replace(/\D/g, '').length < 8) { setState({ phase: 'error', message: 'Please add your name, email and WhatsApp number.' }); return; }
       if (questions.some(([key]) => !f[key])) { setState({ phase: 'error', message: 'Please answer the four short questions.' }); return; }
       if (!f.rules || !f.consent) { setState({ phase: 'error', message: 'Please tick both boxes at the end.' }); return; }
       const url = (window.DWELLHUNT_VIEWING || {}).viewingRequestUrl;
@@ -140,7 +147,13 @@ export function createVideoBooking(React) {
       h('div', { className: 'dh-ol-enquiry-row' },
         h('label', null, 'Your name', h('input', { value: f.name, onChange: set('name'), autoComplete: 'name', required: true })),
         h('label', null, 'Email', h('input', { type: 'email', value: f.email, onChange: set('email'), autoComplete: 'email', required: true }))),
-      h('label', null, 'WhatsApp number (with country code)', h('input', { type: 'tel', value: f.whatsapp, onChange: set('whatsapp'), autoComplete: 'tel', placeholder: '+94 77 123 4567', required: true })),
+      h('div', { className: 'dh-vb-phone' },
+        h(CountryCodePicker, { country: f.country, code: f.code, idPrefix: 'dh-vb', label: 'Country code', required: false,
+          hint: f.country === 'LK' ? 'Sri Lanka (+94) is chosen for you.' : 'Your WhatsApp country.',
+          onSelect: (country, code) => setF(old => ({ ...old, country, code: country === 'manual' ? old.code : code })) }),
+        f.country === 'manual' && h('label', null, 'Country code', h('input', { type: 'tel', value: f.code, onChange: set('code'), placeholder: '+94', inputMode: 'tel' })),
+        h('label', null, 'WhatsApp number', h('input', { type: 'tel', value: f.whatsapp, onChange: set('whatsapp'), autoComplete: 'tel-national', inputMode: 'tel',
+          placeholder: f.code === '+94' ? '77 123 4567' : 'Phone number', required: true }))),
       VR_QUESTIONS(sale).map(([key, legend, options]) => h('fieldset', { key, className: 'dh-ol-enquiry-viewing dh-vb-q' }, h('legend', null, legend),
         options.map(([value, label]) => h('label', { key: value }, h('input', { type: 'radio', name: 'dh-vb-' + key, value, checked: f[key] === value, onChange: set(key) }), h('span', null, label))))),
       h('label', null, 'Anything the owner should know? (optional)', h('textarea', { rows: 2, value: f.message, onChange: set('message'), maxLength: 600 })),
