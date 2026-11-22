@@ -297,7 +297,7 @@ export function createOwnerListing(React) {
         field('locationPrecision', 'How much of the location to show', { options: [['district', 'District only'], ['area', 'City / area and district (recommended)'], ['exact', 'Exact street address']] }),
         rules.building && check('publicBuildingName', `Show the building name “${d.building || 'building'}” on the listing`, 'Your unit number is never shown.'),
         d.selection.listingRole !== 'agent' && check('videoViewing', 'I can show the home on a video call (optional)',
-          'Buyers and tenants who live far away can ask for a video viewing. DwellHunt checks each request and sends it to you first. If you agree, you start a WhatsApp or Google Meet video call and walk them through the home. Leave this unticked if you only want in-person viewings.'),
+          'Buyers and tenants who live far away can book a 30-minute video viewing at times you choose each week. DwellHunt checks each request and sends it to you on Telegram to accept or decline. If you accept, DwellHunt sends you both a Google Meet link, so your phone number stays private, and you walk them through the home on your phone. Leave this unticked if you only want in-person viewings.'),
         h('h3', { className: 'font-bold text-stone-900' }, 'How your listing will look'), publicCard()),
       () => send.phase === 'done' ? null : h(React.Fragment, null,
         validateOwnerDraft(d).map(section => h('div', { className: 'dh-owner-error-summary', key: section.step }, h('strong', null, `${OWNER_STEPS[section.step]} needs attention`),

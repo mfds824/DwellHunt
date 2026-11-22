@@ -220,7 +220,7 @@ export function createOwnerFeed(React) {
           h('input', { type: 'radio', name: 'dh-ol-viewing', value, checked: f.viewing === value, onChange: set('viewing') }), h('span', null, label)))),
       owner && h('label', null, f.viewing === 'video' ? 'Preferred video call date (optional)' : 'Preferred viewing date (optional)',
         h('input', { type: 'date', min: today, value: f.date, onChange: set('date') })),
-      video && f.viewing === 'video' && h('p', { className: 'dh-ol-enquiry-note' }, 'The owner starts a WhatsApp or Google Meet video call and walks you through the home. DwellHunt confirms the time with you first.'),
+      video && f.viewing === 'video' && h('p', { className: 'dh-ol-enquiry-note' }, 'The owner walks you through the home on a Google Meet video call. DwellHunt agrees the time with the owner and emails you the link.'),
       h('label', null, 'Message', h('textarea', { rows: 3, value: f.message, onChange: set('message') })),
       h('label', { className: 'dh-ol-enquiry-consent' }, h('input', { type: 'checkbox', checked: f.consent, onChange: set('consent') }),
         h('span', null, owner ? 'I agree that DwellHunt may use these details to reply. DwellHunt shares my first name and message with the owner, not my phone or email.'
