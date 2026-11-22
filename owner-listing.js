@@ -1,11 +1,11 @@
 import { OWNER_STEPS, CATEGORY_LABELS, APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, SALE_SCOPES, rulesFor, createOwnerDraft, validateOwnerStep,
   validateOwnerDraft, publicOwnerListing, ownerSubmission, unusualFigures, saveOwnerDraft, loadOwnerDraft, OWNER_DRAFT_KEY, combineOwnerPhone,
-  validatePhotoCount, safeUploadUrl } from './owner-listing-model.js?v=20261121-vv1';
+  validatePhotoCount, safeUploadUrl } from './owner-listing-model.js?v=20261123-pn1';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 import { createCountryCodePicker } from './country-code-picker.js';
 import { createPriceInput } from './price-input.js';
-import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261121-vv1';
-import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261121-vv1';
+import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261123-pn1';
+import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261123-pn1';
 
 const primary = 'px-6 py-3 rounded-xl bg-emerald-900 hover:bg-emerald-800 text-white font-bold text-xs disabled:opacity-40';
 const secondary = 'px-5 py-2.5 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50';
@@ -294,7 +294,6 @@ export function createOwnerListing(React) {
             button('Cancel', () => setDescriptionDraft(null))))),
       () => h(React.Fragment, null,
         note('Enquiries and viewing requests come to DwellHunt first. We check them, then pass genuine ones to you. Your phone number and email are never shown.'),
-        field('publicName', 'Name shown on the listing', { optional: true, placeholder: 'Private owner', hint: 'Leave empty to show “Private owner”, or enter a first name.' }),
         field('locationPrecision', 'How much of the location to show', { options: [['district', 'District only'], ['area', 'City / area and district (recommended)'], ['exact', 'Exact street address']] }),
         rules.building && check('publicBuildingName', `Show the building name “${d.building || 'building'}” on the listing`, 'Your unit number is never shown.'),
         d.selection.listingRole !== 'agent' && check('videoViewing', 'I can show the home on a video call (optional)',

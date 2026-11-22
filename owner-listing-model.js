@@ -220,7 +220,8 @@ export function publicOwnerListing(d) {
     description: publicText(d.description, d),
     // Private owners may offer to show the home on a video call they start themselves.
     ...(d.selection.listingRole !== 'agent' && d.videoViewing === true ? { videoViewing: true } : {}),
-    contact: { via: 'DwellHunt', displayName: publicText(d.publicName, d).trim() || 'Private owner' },
+    // Owner listings always show "Private owner"; the owner's name is never shown.
+    contact: { via: 'DwellHunt', displayName: 'Private owner' },
   };
 }
 /** Everything DwellHunt needs to review the listing. Private details are kept apart from the public listing. */
