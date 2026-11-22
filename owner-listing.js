@@ -1,11 +1,11 @@
 import { OWNER_STEPS, CATEGORY_LABELS, APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, SALE_SCOPES, rulesFor, createOwnerDraft, validateOwnerStep,
   validateOwnerDraft, publicOwnerListing, ownerSubmission, unusualFigures, saveOwnerDraft, loadOwnerDraft, OWNER_DRAFT_KEY, combineOwnerPhone,
-  validatePhotoCount, safeUploadUrl } from './owner-listing-model.js?v=20261123-pn1';
+  validatePhotoCount, safeUploadUrl } from './owner-listing-model.js?v=20261123-ap1';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 import { createCountryCodePicker } from './country-code-picker.js?v=20261123-cc1';
 import { createPriceInput } from './price-input.js';
-import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261123-pn1';
-import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261123-pn1';
+import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261123-ap1';
+import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261123-ap1';
 
 const primary = 'px-6 py-3 rounded-xl bg-emerald-900 hover:bg-emerald-800 text-white font-bold text-xs disabled:opacity-40';
 const secondary = 'px-5 py-2.5 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50';
@@ -239,7 +239,7 @@ export function createOwnerListing(React) {
       () => h(React.Fragment, null, note('Your street address stays private. You choose what the public sees in the Visibility step.'), grid(
         field('district', 'District', { options: DISTRICTS }), field('city', 'City / area', { placeholder: 'e.g. Colombo 05, Nugegoda, Kandy' }),
         !rules.landOnly && field('street', 'Street address', { autoComplete: 'street-address' }),
-        rules.building && field('building', 'Building / project name'), rules.building && field('unit', 'Unit / apartment number', { optional: true }),
+        rules.building && field('building', 'Apartment project name', { placeholder: 'e.g. Prime Residencies' }), rules.building && field('unit', 'Unit / apartment number', { optional: true }),
         rules.apartment && field('apartmentType', 'Apartment type', { optional: true, options: APARTMENT_TYPES }),
         rules.commercial && field('commercialType', 'Type of space', { optional: true, options: COMMERCIAL_TYPES }))),
       () => h(React.Fragment, null, grid(
@@ -295,7 +295,7 @@ export function createOwnerListing(React) {
       () => h(React.Fragment, null,
         note('Enquiries and viewing requests come to DwellHunt first. We check them, then pass genuine ones to you. Your phone number and email are never shown.'),
         field('locationPrecision', 'How much of the location to show', { options: [['district', 'District only'], ['area', 'City / area and district (recommended)'], ['exact', 'Exact street address']] }),
-        rules.building && check('publicBuildingName', `Show the building name “${d.building || 'building'}” on the listing`, 'Your unit number is never shown.'),
+        rules.building && check('publicBuildingName', `Show the apartment project name “${d.building || 'project'}” on the listing`, 'Your unit number is never shown.'),
         d.selection.listingRole !== 'agent' && check('videoViewing', 'I can show the home on a video call (optional)',
           'Buyers and tenants who live far away can book a 30-minute video viewing at times you choose each week. DwellHunt checks each request and sends it to you on Telegram to accept or decline. If you accept, DwellHunt sends you both a Google Meet link, so your phone number stays private, and you walk them through the home on your phone. Leave this unticked if you only want in-person viewings.'),
         h('h3', { className: 'font-bold text-stone-900' }, 'How your listing will look'), publicCard()),

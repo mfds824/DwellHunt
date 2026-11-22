@@ -106,7 +106,7 @@ export function validateOwnerStep(d, step) {
   if (step === 1) {
     required('district', 'District'); required('city', 'City / area');
     if (!rules.landOnly) required('street', 'Street address');
-    if (rules.building) required('building', 'Building / project name');
+    if (rules.building) required('building', 'Apartment project name');
   }
   if (step === 2) {
     if (rules.rooms) { whole('bedrooms', 'Bedrooms', 0, 30); whole('bathrooms', 'Bathrooms', 0, 30); }
@@ -150,7 +150,7 @@ export function validateOwnerStep(d, step) {
     required('title', 'Listing title');
     if (rules.building && !d.publicBuildingName && String(d.building).trim().length > 2 &&
         String(d.title).toLocaleLowerCase().includes(String(d.building).trim().toLocaleLowerCase()))
-      errors.title = 'Your title includes the building name, which you’re keeping private. Remove it, or choose to show the building name in the Visibility step.';
+      errors.title = 'Your title includes the apartment project name, which you’re keeping private. Remove it, or choose to show the project name in the Visibility step.';
     const usable = d.photos.filter(p => p.status === 'selected' || (p.status === 'ready' && safeUploadUrl(p.url)));
     if (!usable.length) errors.photos = 'Add at least one photo of the actual property.';
     if (d.photos.some(p => p.status === 'failed')) errors.photos = 'Remove or re-add the photos marked “needs attention”.';
