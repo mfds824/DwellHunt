@@ -68,7 +68,6 @@ export const VR_QUESTIONS = (sale) => [
   sale ? ['payment', 'How will you pay?', [['cash', 'Cash / own funds'], ['loan-approved', 'Home loan approved'], ['loan-applying', 'Applying for a loan'], ['not-yet', 'Not decided yet']]]
     : ['occupants', 'Who will live there?', [['family', 'A family'], ['couple', 'A couple'], ['single', 'One person'], ['sharing', 'Friends sharing'], ['company', 'A company / staff']]],
   ['budget', 'Does the price fit your budget?', [['yes', 'Yes'], ['close', 'It is close'], ['no', 'It is above my budget']]],
-  ['visit', 'Before paying anything, can you or someone you trust visit in person?', [['yes', 'Yes, I can'], ['someone', 'Someone can go for me'], ['no', 'No']]],
 ];
 /** "+94" and "077 123 4567" become "+94771234567": spaces dropped, and a leading 0 of the local number too. */
 export function whatsappNumber(code, number) {
@@ -76,7 +75,7 @@ export function whatsappNumber(code, number) {
   return local ? String(code || '').replace(/[^\d+]/g, '') + local : '';
 }
 export function videoRequestPayload(l, f, zone) {
-  const sale = l.purpose === 'buy', answers = { timeline: f.timeline, budget: f.budget, visit: f.visit };
+  const sale = l.purpose === 'buy', answers = { timeline: f.timeline, budget: f.budget };
   answers[sale ? 'payment' : 'occupants'] = sale ? f.payment : f.occupants;
   return { reference: l.reference, slot: f.slot, name: f.name.trim(), email: f.email.trim(), whatsapp: whatsappNumber(f.code, f.whatsapp), timezone: zone,
     answers, message: f.message.trim(), rules: f.rules === true, consent: f.consent === true, website: f.website || '' };
@@ -109,7 +108,7 @@ export function createVideoBooking(React) {
     const sale = l.purpose === 'buy', zone = buyerTimeZone(), colombo = zone === 'Asia/Colombo';
     const days = React.useMemo(() => groupSlots(slots, zone), [slots, zone]);
     const [day, setDay] = React.useState(0);
-    const [f, setF] = React.useState({ slot: '', name: '', email: '', country: 'LK', code: '+94', whatsapp: '', timeline: '', payment: '', occupants: '', budget: '', visit: '', message: '', rules: false, consent: false });
+    const [f, setF] = React.useState({ slot: '', name: '', email: '', country: 'LK', code: '+94', whatsapp: '', timeline: '', payment: '', occupants: '', budget: '', message: '', rules: false, consent: false });
     const [state, setState] = React.useState({ phase: 'idle', message: '' });
     const honeypot = React.useRef(null);
     const set = key => event => setF(old => ({ ...old, [key]: key === 'rules' || key === 'consent' ? event.target.checked : event.target.value }));
@@ -119,7 +118,7 @@ export function createVideoBooking(React) {
       const questions = VR_QUESTIONS(sale);
       if (!f.slot) { setState({ phase: 'error', message: 'Please choose a time.' }); return; }
       if (!f.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()) || whatsappNumber(f.code, f.whatsapp).replace(/\D/g, '').length < 8) { setState({ phase: 'error', message: 'Please add your name, email and WhatsApp number.' }); return; }
-      if (questions.some(([key]) => !f[key])) { setState({ phase: 'error', message: 'Please answer the four short questions.' }); return; }
+      if (questions.some(([key]) => !f[key])) { setState({ phase: 'error', message: 'Please answer the three short questions.' }); return; }
       if (!f.rules || !f.consent) { setState({ phase: 'error', message: 'Please tick both boxes at the end.' }); return; }
       const url = (window.DWELLHUNT_VIEWING || {}).viewingRequestUrl;
       if (!url) { setState({ phase: 'error', message: VR_ERRORS.NOT_OPEN }); return; }
@@ -137,7 +136,7 @@ export function createVideoBooking(React) {
     const current = days[Math.min(day, days.length - 1)];
     return h('form', { className: 'dh-ol-enquiry dh-vb', onSubmit: submit, noValidate: true, 'aria-labelledby': 'dh-vb-title' },
       h('h3', { id: 'dh-vb-title' }, 'Book a video viewing'),
-      h('p', { className: 'dh-ol-enquiry-note' }, 'The owner shows you the home on a 30-minute video call. Pick a time, answer four short questions, and the owner confirms within 12 hours.'),
+      h('p', { className: 'dh-ol-enquiry-note' }, 'The owner shows you the home on a 30-minute video call. Pick a time, answer three short questions, and the owner confirms within 12 hours.'),
       h('p', { className: 'dh-vb-zone' }, colombo ? 'Times are Sri Lanka time.' : `Times are shown in your time zone (${zone}).`),
       h('div', { className: 'dh-vb-days', role: 'tablist', 'aria-label': 'Day' }, days.map((d, n) => h('button', { key: d.day, type: 'button', role: 'tab',
         'aria-selected': n === day ? 'true' : 'false', className: 'dh-vb-day', onClick: () => setDay(n) }, d.day))),
