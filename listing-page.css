@@ -25,8 +25,11 @@
 .dh-lp-all { position: absolute; right: 14px; bottom: 14px; border: 0; background: #fff; color: #172e25; border-radius: 10px; padding: 9px 14px; font: inherit; font-weight: 800; font-size: 14px; box-shadow: 0 4px 14px rgba(0,0,0,.18); cursor: pointer; }
 
 /* Two columns: details and a sticky contact card. */
-.dh-lp-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 40px; margin-top: 24px; align-items: start; }
-/* Pinned while scrolling, but never taller than the screen: a long form (the video booking) scrolls inside it. */
+.dh-lp-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 40px; align-items: start; }
+.dh-lp-left { min-width: 0; }
+.dh-lp-gallery + .dh-lp-main { margin-top: 24px; }
+/* Pinned from the top of the page and never taller than the screen: it does not move with the listing, and a long form
+   (the video booking) scrolls inside it on its own. */
 .dh-lp-aside { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .dh-lp-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 6px; font-weight: 800; font-size: 14px; }
 .dh-lp-dot { width: 10px; height: 10px; border-radius: 50%; background: #047857; box-shadow: 0 0 0 3px #d1fae5; }
@@ -127,7 +130,8 @@
 }
 @media (max-width: 640px) {
   .dh-lp-wrap { padding: 0 0 96px; }
-  .dh-lp-wrap > .dh-lp-grid { padding: 0 16px; }
+  .dh-lp-wrap > .dh-lp-grid { padding: 0; }
+  .dh-lp-main, .dh-lp-aside { padding: 0 16px; }
   .dh-lp-gallery, .dh-lp-gallery-2, .dh-lp-gallery-3, .dh-lp-gallery-4, .dh-lp-gallery-5 { grid-template-columns: 1fr; grid-template-rows: 1fr; border-radius: 0; height: 62vw; max-height: 380px; }
   .dh-lp-gallery .dh-lp-tile:not(.is-main) { display: none; }
   .dh-lp-all { right: 12px; bottom: 12px; padding: 7px 12px; font-size: 13px; }

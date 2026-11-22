@@ -282,11 +282,12 @@ export function createListingPage(React, d) {
           shared && h('span', { role: 'status', className: 'dh-lp-shared' }, shared),
           h('button', { type: 'button', onClick: share }, 'Share'),
           h('button', { type: 'button', onClick: onClose, 'aria-label': 'Close listing', className: 'dh-lp-x' }, '×'))),
-      h('div', { className: 'dh-lp-wrap' },
+      // Two columns from the top: photos and details on the left, the contact panel on the right. The panel is pinned from
+      // the start, so scrolling the listing never moves it, and a long form scrolls inside the panel on its own.
+      h('div', { className: 'dh-lp-wrap' }, h('div', { className: 'dh-lp-grid' }, h('div', { className: 'dh-lp-left' },
         gallery.length > 0 && h('div', { className: `dh-lp-gallery dh-lp-gallery-${Math.min(gallery.length, 5)}` },
           gallery.slice(0, 5).map((p, n) => tile(p, n, (n === 0 ? 'is-main ' : '') + (p.label === 'floor plan' ? 'is-plan' : ''))),
           h('button', { type: 'button', className: 'dh-lp-all', onClick: () => setLightbox(0) }, gallery.length === 1 ? 'View photo' : `See all ${gallery.length} photos`)),
-        h('div', { className: 'dh-lp-grid' },
           h('main', { className: 'dh-lp-main' },
             h('p', { className: 'dh-lp-status' }, h('span', { className: 'dh-lp-dot', 'aria-hidden': 'true' }), l.purpose === 'buy' ? 'For sale' : 'For rent',
               l.negotiable && h('span', { className: 'dh-lp-pill' }, 'Price negotiable'),
@@ -339,7 +340,7 @@ export function createListingPage(React, d) {
               h('h2', null, 'More verified listings'),
               h('div', { className: 'dh-lp-others' }, others.slice(0, 3).map(o => h('button', { key: o.reference, type: 'button', className: 'dh-lp-other', onClick: () => onOpen(o.reference) },
                 h('img', { src: d.safeImage(o.photos[0] && o.photos[0].url), alt: '', loading: 'lazy' }),
-                h('strong', null, d.ownerPriceText(o)), h('span', null, d.ownerFacts(o).join(' · ')), h('span', null, titleCase(d.ownerPlace(o)))))))),
+                h('strong', null, d.ownerPriceText(o)), h('span', null, d.ownerFacts(o).join(' · ')), h('span', null, titleCase(d.ownerPlace(o))))))))),
 
           h('aside', { className: 'dh-lp-aside' }, h(ContactCard, { listing: l })))),
       h('div', { className: 'dh-lp-mobilebar' },
