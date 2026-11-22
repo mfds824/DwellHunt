@@ -33,6 +33,13 @@
       .banner { border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; background: var(--warn-bg); color: var(--warn); }
       .confirm { margin-top: 14px; padding: 14px; border: 1px solid #f1c9b1; border-radius: 12px; background: var(--warn-bg); }
       .confirm p { margin: 0 0 10px; color: var(--warn); }
+      .fb { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+      .fb h2 { margin: 0 0 8px; font-size: 18px; color: var(--brand); }
+      .fb label { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; }
+      .fb input[type=checkbox] { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--brand); flex: none; }
+      .fb textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; margin: 6px 0 12px; }
+      .fb .missed { color: var(--muted); font-size: 14px; }
+      .thanks { margin-top: 16px; background: var(--chip); border-radius: 12px; padding: 12px 14px; color: var(--brand); }
       .hidden { display: none !important; }
       .center { text-align: center; color: var(--muted); padding: 40px 0; }
     </style>
@@ -56,6 +63,17 @@
           <p id="confirm-text">Cancel this video viewing? The owner will be told, and the time will open for other buyers.</p>
           <div class="actions"><button class="btn danger" id="yes" type="button">Yes, cancel it</button><button class="btn ghost" id="no" type="button">Keep it</button></div>
         </div>
+        <form class="fb hidden" id="fb">
+          <h2>How did it go?</h2>
+          <label><input type="checkbox" value="shown" /> <span>The owner showed me everything I asked to see</span></label>
+          <label><input type="checkbox" value="clear" /> <span>The video and sound were clear</span></label>
+          <label><input type="checkbox" value="interested" /> <span>I am still interested in this home</span></label>
+          <label><input type="checkbox" value="visit" /> <span>I would like to visit in person or talk about next steps</span></label>
+          <textarea id="comment" rows="2" maxlength="500" placeholder="Anything else? (optional)"></textarea>
+          <label class="missed"><input type="checkbox" id="missed" /> <span>The video call did not happen</span></label>
+          <button class="btn primary" id="send" type="submit">Send feedback</button>
+        </form>
+        <p class="thanks hidden" id="thanks">Thank you for your feedback. DwellHunt will be in touch if you want to take this home further.</p>
         <p class="note">Please do not record the call. DwellHunt never asks for an advance or deposit before you, or someone you trust, have visited in person and a lawyer has checked the deed.</p>
       </section>
     </main>
@@ -76,7 +94,7 @@
         var STATUS = { requested: 'Waiting for the owner to accept. You will get an email either way within 12 hours.',
           approved: 'Confirmed. Join with the button below at the time above; you will not need to be let in.',
           declined: 'This time did not work out. We emailed you other times the owner is free.', expired: 'The owner could not confirm in time. We emailed you other times.',
-          cancelled: 'This video viewing is cancelled.' };
+          cancelled: 'This video viewing is cancelled.', completed: 'This video viewing has taken place.', 'no-show': 'This video viewing has taken place.' };
         function listingUrl() { return './#owner-listing=' + encodeURIComponent(data.reference); }
         function problem(text) { $('loading').textContent = text; }
         function show(r) {
@@ -84,16 +102,20 @@
           $('title').textContent = r.title;
           if (r.slot) { $('when').textContent = fmt(r.slot, zone, DAY) + ', ' + fmt(r.slot, zone, TIME) + (zone === 'Asia/Colombo' ? ' (Sri Lanka time)' : ' your time');
             $('colombo').textContent = zone === 'Asia/Colombo' ? '30-minute video call' : fmt(r.slot, 'Asia/Colombo', TIME) + ' in Sri Lanka · 30-minute video call'; }
-          $('status').textContent = STATUS[r.status] || '';
-          $('heading').textContent = r.status === 'approved' ? 'Your video viewing is confirmed' : r.status === 'requested' ? 'Your video viewing request' : 'Your video viewing';
+          $('status').textContent = r.canFeedback ? 'Your viewing time has passed. Please tell us how it went.' : STATUS[r.status] || '';
+          $('heading').textContent = r.canFeedback || r.feedbackDone ? 'How was your video viewing?' : r.status === 'approved' ? 'Your video viewing is confirmed' : r.status === 'requested' ? 'Your video viewing request' : 'Your video viewing';
           $('join').classList.toggle('hidden', !r.meet); if (r.meet) $('join').href = r.meet;
           $('cancel').classList.toggle('hidden', !r.canCancel);
           $('other').classList.toggle('hidden', !r.reference);
           $('other').textContent = r.canCancel ? 'Choose another time' : 'Book another time';
           $('confirm').classList.add('hidden');
+          $('fb').classList.toggle('hidden', !r.canFeedback);
+          $('thanks').classList.toggle('hidden', !r.feedbackDone);
+          if (r.canFeedback || r.feedbackDone) $('join').classList.add('hidden');
         }
-        function call(op) {
-          return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ id: q.id, key: q.k, op: op }) })
+        function call(op, extra) {
+          var body = { id: q.id, key: q.k, op: op }; if (extra) for (var k in extra) body[k] = extra[k];
+          return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) })
             .then(function (r) { return r.json().catch(function () { return { ok: false }; }); }).catch(function () { return { ok: false, code: 'NETWORK' }; });
         }
         function ask(text, next) { then = next; $('confirm-text').textContent = text; $('confirm').classList.remove('hidden'); $('yes').focus(); }
@@ -111,6 +133,15 @@
           ask('To choose another time, we cancel this one first, then show you the owner\'s free times.', function () { cancel(function () { location.href = listingUrl(); }); });
         });
         $('yes').addEventListener('click', function () { if (then) then(); });
+        var boxes = function () { return Array.prototype.slice.call(document.querySelectorAll('#fb input[value]')); };
+        $('missed').addEventListener('change', function () { boxes().forEach(function (b) { b.disabled = $('missed').checked; if ($('missed').checked) b.checked = false; }); });
+        $('fb').addEventListener('submit', function (e) {
+          e.preventDefault(); if (busy) return; busy = true; $('send').disabled = true; $('send').textContent = 'Sending…';
+          call('feedback', { ticks: boxes().filter(function (b) { return b.checked; }).map(function (b) { return b.value; }), comment: $('comment').value.trim(), missed: $('missed').checked })
+            .then(function (r) { busy = false; $('send').disabled = false; $('send').textContent = 'Send feedback';
+              if (!r.ok) { $('banner').textContent = r.code === 'ALREADY_SENT' ? 'Thanks, we already have your feedback.' : 'Could not send. Please try again.'; $('banner').classList.remove('hidden'); return; }
+              show(r); });
+        });
         $('no').addEventListener('click', function () { $('confirm').classList.add('hidden'); });
 
         if (!/^VR-\d{4}-\d{4}$/.test(q.id || '') || !/^[a-f0-9]{64}$/.test(q.k || '')) { problem(MESSAGES.INVALID_REQUEST); return; }
