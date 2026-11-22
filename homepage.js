@@ -378,6 +378,16 @@ export function createHomepage(
       h("span", null, "Thoughtful property search for Sri Lanka"),
       h("a", { href: "./guides/", className: "dh-footer-link" }, "Renting & buying guides"),
       h("a", { href: "./privacy.html", className: "dh-footer-link" }, "Privacy Policy"),
+      // DwellHunt's own social pages (opened in a new tab).
+      h("nav", { className: "dh-footer-social", "aria-label": "DwellHunt on social media" },
+        h("a", { href: "https://www.instagram.com/dwellhunt/", target: "_blank", rel: "noopener noreferrer", "aria-label": "DwellHunt on Instagram" },
+          h("svg", { viewBox: "0 0 24 24", width: 18, height: 18, "aria-hidden": "true", fill: "none", stroke: "currentColor", strokeWidth: 2 },
+            h("rect", { x: 3, y: 3, width: 18, height: 18, rx: 5 }), h("circle", { cx: 12, cy: 12, r: 4 }), h("circle", { cx: 17.5, cy: 6.5, r: 1, fill: "currentColor", stroke: "none" })),
+          "Instagram"),
+        h("a", { href: "https://www.facebook.com/DwellHunt", target: "_blank", rel: "noopener noreferrer", "aria-label": "DwellHunt on Facebook" },
+          h("svg", { viewBox: "0 0 24 24", width: 18, height: 18, "aria-hidden": "true", fill: "currentColor" },
+            h("path", { d: "M13.5 21v-7.5h2.5l.4-3h-2.9V8.6c0-.9.3-1.5 1.5-1.5h1.5V4.4c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.3-3.7 3.8v2.4H8.1v3h2.5V21h2.9z" })),
+          "Facebook")),
       h("small", { className: "dh-footer-note" }, "DwellHunt checks who is listing a property but does not guarantee title, boundaries or approvals. Before paying any money, have a lawyer check the deed and do a title search."),
     );
   }

@@ -1090,6 +1090,11 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* DwellHunt's Instagram and Facebook pages. */
+.dh-footer-social { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.dh-footer-social a { display: inline-flex; align-items: center; gap: 6px; color: var(--dh-green); font-weight: 700; text-decoration: none; min-height: 32px; }
+.dh-footer-social a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.dh-footer-social svg { flex: none; }
 
 /* ---- Calm homepage (fewer words, one job per section) ---- */
 .dh-home-search .dh-mode { display: inline-flex; margin-bottom: 14px; }
