@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Video Viewing Times — DwellHunt</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <style>
+      :root { --ink: #1c2b24; --muted: #4b5d55; --brand: #064e3b; --accent: #047857; --line: #dbe5dc; --bg: #f5f7f3; --card: #ffffff;
+        --chip: #eef5ef; --on: #047857; --warn: #9a3412; --warn-bg: #fff4ec; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 "Plus Jakarta Sans", Arial, sans-serif; }
+      header { background: var(--card); border-bottom: 1px solid var(--line); }
+      .bar { max-width: 860px; margin: 0 auto; padding: 14px 16px; }
+      .brand { color: var(--brand); font-weight: 800; font-size: 21px; text-decoration: none; }
+      .brand span { color: var(--accent); }
+      main { max-width: 860px; margin: 0 auto; padding: 20px 16px 120px; }
+      .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; margin-bottom: 14px; }
+      h1 { margin: 0 0 4px; font-size: 25px; line-height: 1.25; color: var(--brand); }
+      .listing { margin: 0; font-weight: 700; }
+      .week { margin: 2px 0 0; color: var(--muted); }
+      .note { margin: 12px 0 0; color: var(--muted); font-size: 14.5px; }
+      .quick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+      button { font: inherit; cursor: pointer; }
+      .pill { border: 1px solid var(--line); background: var(--card); color: var(--brand); font-weight: 700; border-radius: 999px; padding: 9px 16px; }
+      .pill:hover { border-color: var(--accent); }
+      .pill:disabled { opacity: .5; cursor: default; }
+      .banner { border-radius: 12px; padding: 12px 14px; margin-top: 14px; font-size: 15px; }
+      .banner.warn { background: var(--warn-bg); color: var(--warn); }
+      .banner.ok { background: var(--chip); color: var(--brand); }
+      .day { padding: 16px 20px; }
+      .day-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+      .day-head h2 { margin: 0; font-size: 17px; color: var(--brand); }
+      .day-head .count { color: var(--muted); font-size: 14px; font-weight: 400; margin-left: 6px; }
+      .parts { display: flex; flex-wrap: wrap; gap: 6px; }
+      .part { border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 999px; padding: 4px 11px; font-size: 13.5px; }
+      .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+      @media (min-width: 620px) { .grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+      .slot { border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 10px; padding: 9px 0; font-size: 15px; font-variant-numeric: tabular-nums; }
+      .slot[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: #fff; font-weight: 700; }
+      .slot:disabled { opacity: .35; cursor: default; }
+      .past { opacity: .55; }
+      .footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); }
+      .footer .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .total { color: var(--muted); font-size: 15px; }
+      .save { border: 0; background: var(--brand); color: #fff; font-weight: 800; border-radius: 999px; padding: 12px 26px; }
+      .save:disabled { opacity: .55; cursor: default; }
+      .hidden { display: none !important; }
+      .center { text-align: center; color: var(--muted); padding: 40px 0; }
+    </style>
+  </head>
+  <body>
+    <header><div class="bar"><a class="brand" href="./">Dwell<span>Hunt</span></a></div></header>
+    <main>
+      <p id="loading" class="center">Loading your viewing times…</p>
+      <section id="problem" class="card hidden"><h1>This link does not work</h1><p id="problem-text" class="note"></p></section>
+      <div id="app" class="hidden">
+        <section class="card">
+          <h1>Video viewing times</h1>
+          <p class="listing" id="title"></p>
+          <p class="week" id="week"></p>
+          <p class="note">Tap the times when you can show your home on a video call. Each time is a 30-minute call. All times are Sri Lanka time. Buyers can only ask for these times, and you approve every request before anything is booked.</p>
+          <div class="quick">
+            <button class="pill" id="same" type="button">🔁 Same as last week</button>
+            <button class="pill" id="pause" type="button">⏸ Pause this week</button>
+            <button class="pill" id="clear" type="button">Clear all</button>
+          </div>
+          <div id="state" class="banner hidden" role="status"></div>
+        </section>
+        <div id="days"></div>
+      </div>
+    </main>
+    <div class="footer hidden" id="footer"><div class="bar"><span class="total" id="total"></span><button class="save" id="save" type="button">Save times</button></div></div>
+    <script>
+      (function () {
+        'use strict';
+        // Only these two backends; the page never takes a URL from the link.
+        var API = { live: 'https://dwellhunt-viewing-api-production.countdracula-11537.workers.dev/api/dwellhunt/owner-availability',
+          dev: 'https://dwellhunt-viewing-api-dev.countdracula-11537.workers.dev/api/dwellhunt/owner-availability' };
+        var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        var TIMES = []; for (var m = 8 * 60; m < 20 * 60; m += 30) TIMES.push(('0' + Math.floor(m / 60)).slice(-2) + ('0' + m % 60).slice(-2));
+        var PARTS = [['Morning', '0800', '1200'], ['Afternoon', '1200', '1600'], ['Evening', '1600', '2000']];
+        var $ = function (id) { return document.getElementById(id); };
+        var q = {}; location.hash.slice(1).split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); });
+        var url = q.api === 'dev' ? API.dev : API.live;
+        var picked = {}, data = null, dirty = false, busy = false;
+
+        function dayDate(week, d) { return new Date(Date.parse(week + 'T00:00:00Z') + d * 86400000); }
+        function dayText(dt) { return DAYS[(dt.getUTCDay() + 6) % 7] + ' ' + dt.getUTCDate() + ' ' + MONTHS[dt.getUTCMonth()]; }
+        function slTodayIndex(week) { // days of this week already over in Sri Lanka (0 = none)
+          var sl = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+          return Math.max(0, Math.min(7, Math.round((Date.parse(sl + 'T00:00:00Z') - Date.parse(week + 'T00:00:00Z')) / 86400000)));
+        }
+        function hm(t) { return t.slice(0, 2) + ':' + t.slice(2); }
+        function problem(text) { $('loading').classList.add('hidden'); $('app').classList.add('hidden'); $('footer').classList.add('hidden');
+          $('problem').classList.remove('hidden'); $('problem-text').textContent = text; }
+        var MESSAGES = { LINK_INVALID: 'This link is not valid any more. Send /times to the DwellHunt Owners bot on Telegram for a fresh link.',
+          LISTING_NOT_AVAILABLE: 'This listing is not live, or it does not offer video viewings. Message DwellHunt on Telegram if this is wrong.',
+          NOT_OPEN: 'Video viewing times are not open yet. We will let you know on Telegram.', WEEK_PASSED: 'This week has passed. Send /times on Telegram for the current week.',
+          NO_LAST_WEEK: 'No times were saved last week, so there is nothing to copy.', INVALID_REQUEST: 'This link is incomplete. Please open it again from Telegram.' };
+        function say(kind, text) { var b = $('state'); b.className = 'banner ' + kind; b.textContent = text; }
+
+        function call(op, extra) {
+          var body = { reference: q.r, week: q.w, key: q.k, op: op }; if (extra) for (var k in extra) body[k] = extra[k];
+          return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) })
+            .then(function (r) { return r.json().catch(function () { return { ok: false, code: 'SERVICE_UNAVAILABLE' }; }); })
+            .catch(function () { return { ok: false, code: 'NETWORK' }; });
+        }
+        function total() { return Object.keys(picked).length; }
+        function refresh() {
+          var n = total(), past = data ? slTodayIndex(data.week) : 0;
+          $('total').textContent = n ? n + ' time' + (n === 1 ? '' : 's') + ' chosen' : 'No times chosen';
+          $('save').disabled = busy || !dirty || !data.editable;
+          $('same').disabled = busy || !data.editable || !data.lastWeek;
+          $('same').textContent = data.lastWeek ? '🔁 Same as last week (' + data.lastWeek + ')' : '🔁 Same as last week';
+          $('pause').disabled = busy || !data.editable || data.paused && !dirty;
+          $('clear').disabled = busy || !data.editable || !n;
+          document.querySelectorAll('.slot').forEach(function (b) { b.setAttribute('aria-pressed', picked[b.dataset.s] ? 'true' : 'false'); });
+          for (var d = 0; d < 7; d++) { var c = Object.keys(picked).filter(function (s) { return s[0] === String(d); }).length;
+            $('count-' + d).textContent = c ? '· ' + c : ''; }
+          if (dirty) say('warn', 'You have changes that are not saved yet.');
+        }
+        function change(fn) { fn(); dirty = true; refresh(); }
+        function build() {
+          var past = slTodayIndex(data.week), box = $('days'); box.textContent = '';
+          for (var d = 0; d < 7; d++) (function (d) {
+            var card = document.createElement('section'), locked = !data.editable || d < past;
+            card.className = 'card day' + (d < past ? ' past' : '');
+            var head = document.createElement('div'); head.className = 'day-head';
+            var h2 = document.createElement('h2'); h2.textContent = dayText(dayDate(data.week, d));
+            var count = document.createElement('span'); count.className = 'count'; count.id = 'count-' + d; h2.appendChild(count);
+            var parts = document.createElement('div'); parts.className = 'parts';
+            if (!locked) PARTS.forEach(function (p) {
+              var b = document.createElement('button'); b.type = 'button'; b.className = 'part'; b.textContent = p[0];
+              b.addEventListener('click', function () { change(function () {
+                var keys = TIMES.filter(function (t) { return t >= p[1] && t < p[2]; }).map(function (t) { return d + '-' + t; });
+                var all = keys.every(function (k) { return picked[k]; }); keys.forEach(function (k) { if (all) delete picked[k]; else picked[k] = true; }); }); });
+              parts.appendChild(b);
+            });
+            if (d < past) { var gone = document.createElement('span'); gone.className = 'part'; gone.textContent = 'Day passed'; parts.appendChild(gone); }
+            head.appendChild(h2); head.appendChild(parts); card.appendChild(head);
+            var grid = document.createElement('div'); grid.className = 'grid';
+            TIMES.forEach(function (t) {
+              var b = document.createElement('button'); b.type = 'button'; b.className = 'slot'; b.dataset.s = d + '-' + t; b.textContent = hm(t); b.disabled = locked;
+              b.setAttribute('aria-label', dayText(dayDate(data.week, d)) + ' ' + hm(t));
+              b.addEventListener('click', function () { change(function () { if (picked[b.dataset.s]) delete picked[b.dataset.s]; else picked[b.dataset.s] = true; }); });
+              grid.appendChild(b);
+            });
+            card.appendChild(grid); box.appendChild(card);
+          })(d);
+        }
+        function show(r) {
+          data = r; picked = {}; (r.slots || []).forEach(function (s) { picked[s] = true; }); dirty = false;
+          $('title').textContent = r.title; $('week').textContent = dayText(dayDate(r.week, 0)) + ' to ' + dayText(dayDate(r.week, 6));
+          $('loading').classList.add('hidden'); $('app').classList.remove('hidden'); $('footer').classList.remove('hidden');
+          build(); refresh();
+          if (!r.editable) say('warn', 'This week has passed, so these times can no longer be changed.');
+          else if (r.paused) say('warn', '⏸ Video viewings are paused this week. Choose times and save to open them again.');
+          else if (r.status === 'saved') say('ok', '✅ Saved. Buyers can ask for these times.');
+          else $('state').classList.add('hidden');
+        }
+        function act(op, extra, done) {
+          if (busy) return; busy = true; refresh(); $('save').textContent = 'Saving…';
+          call(op, extra).then(function (r) {
+            busy = false; $('save').textContent = 'Save times';
+            if (!r.ok) { refresh(); say('warn', MESSAGES[r.code] || 'Could not save. Please check your connection and try again.'); return; }
+            show(r); say(r.paused ? 'warn' : 'ok', done(r));
+          });
+        }
+        $('save').addEventListener('click', function () { act('save', { slots: Object.keys(picked).sort() }, function (r) {
+          return r.slots.length ? '✅ Saved ' + r.slots.length + ' time' + (r.slots.length === 1 ? '' : 's') + '. Buyers can ask for these times.' : 'Saved with no times. Buyers cannot book this week.'; }); });
+        $('same').addEventListener('click', function () { act('same', null, function (r) { return '✅ Copied last week: ' + r.slots.length + ' times saved.'; }); });
+        $('pause').addEventListener('click', function () { act('pause', null, function () { return '⏸ Paused. Buyers will not see any times this week.'; }); });
+        $('clear').addEventListener('click', function () { change(function () { picked = {}; }); });
+        window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+        if (!/^OL-\d{4}-\d{4}$/.test(q.r || '') || !/^\d{4}-\d{2}-\d{2}$/.test(q.w || '') || !/^[a-f0-9]{64}$/.test(q.k || '')) { problem(MESSAGES.INVALID_REQUEST); return; }
+        call('get').then(function (r) { if (r.ok) show(r); else problem(MESSAGES[r.code] || 'DwellHunt could not load your times right now. Please try again in a few minutes.'); });
+      })();
+    </script>
+  </body>
+</html>
