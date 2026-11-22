@@ -138,7 +138,15 @@ export function createOwnerListing(React) {
         action ? h('div', { className: 'dh-owner-title-heading' }, h('label', { htmlFor: id, className: 'block text-xs font-bold text-stone-700' }, labelText), action)
           : h('label', { htmlFor: id, className: 'block text-xs font-bold text-stone-700 mb-2' }, labelText),
         options ? h('select', props, h('option', { value: '' }, 'Choose…'), options.map(option => { const [value, text] = Array.isArray(option) ? option : [option, option]; return h('option', { key: value, value }, text); }))
-          : type === 'textarea' ? h('textarea', { ...props, rows: 5 }) : h('input', { ...props, type }),
+          : type === 'textarea' ? h('textarea', { ...props, rows: 5 })
+          // Numbers use a text box that accepts only digits (and a decimal point where allowed), so arrow keys and the mouse
+          // wheel cannot change a count by accident. Phones still show the number keypad.
+          : type === 'number' ? (({ min, max, step, ...rest }) => h('input', { ...rest, type: 'text', inputMode: step === 'any' ? 'decimal' : 'numeric', autoComplete: 'off',
+            value: rest.value ?? '', onChange: event => {
+              const decimal = step === 'any', text = event.target.value.replace(decimal ? /[^\d.]/g : /\D/g, '');
+              change(key, decimal ? text.replace(/(\..*)\./g, '$1') : text);
+            } }))(props)
+          : h('input', { ...props, type }),
         hint && h('p', { id: `${id}-hint`, className: 'dh-owner-hint' }, hint), error && h('p', { id: `${id}-error`, className: 'dh-owner-error' }, error));
     };
     const check = (key, label, hint) => h('div', { key, className: 'dh-owner-field' },
