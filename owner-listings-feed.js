@@ -1,6 +1,6 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
-import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261121-vv1";
+import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261123-vb1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
 const safeImage = url => typeof url === 'string' && /^https:\/\/res\.cloudinary\.com\//.test(url) ? url : '';
@@ -50,6 +50,111 @@ export function agentEnquiryPayload(l, f, at = new Date()) {
     property_id: l.reference, agency_id: '', location: (l.location && l.location.city) || '', budget: '', message: f.message.trim(),
     preferred_date: date, source: 'DwellHunt Website', submittedAt: at.toISOString(), lead_id: 'enq-' + at.getTime(), consent: true, consent_at: at.toISOString() };
 }
+/* Video viewing booking (owner listings that offer video viewings). The owner's free 30-minute times come from the Worker
+ * as UTC start times and are shown in the buyer's own time zone, with the Sri Lanka time alongside. */
+export const buyerTimeZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Colombo'; } catch { return 'Asia/Colombo'; } };
+const fmt = (iso, zone, opts) => { try { return new Intl.DateTimeFormat('en-GB', { timeZone: zone, ...opts }).format(new Date(iso)); } catch { return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Colombo', ...opts }).format(new Date(iso)); } };
+export const slotDay = (iso, zone) => fmt(iso, zone, { weekday: 'short', day: 'numeric', month: 'short' });
+export const slotTime = (iso, zone) => fmt(iso, zone, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/** Free times grouped by the buyer's local day: [{ day, slots: [iso] }]. */
+export function groupSlots(slots, zone) {
+  const days = [];
+  slots.forEach(iso => { const day = slotDay(iso, zone), last = days[days.length - 1]; if (last && last.day === day) last.slots.push(iso); else days.push({ day, slots: [iso] }); });
+  return days;
+}
+export const VR_QUESTIONS = (sale) => [
+  ['timeline', sale ? 'When do you plan to buy?' : 'When do you want to move in?', [['now', 'Within a month'], ['1-3', 'In 1-3 months'], ['3-6', 'In 3-6 months'], ['later', 'Later / just looking']]],
+  sale ? ['payment', 'How will you pay?', [['cash', 'Cash / own funds'], ['loan-approved', 'Home loan approved'], ['loan-applying', 'Applying for a loan'], ['not-yet', 'Not decided yet']]]
+    : ['occupants', 'Who will live there?', [['family', 'A family'], ['couple', 'A couple'], ['single', 'One person'], ['sharing', 'Friends sharing'], ['company', 'A company / staff']]],
+  ['budget', 'Does the price fit your budget?', [['yes', 'Yes'], ['close', 'It is close'], ['no', 'It is above my budget']]],
+  ['visit', 'Before paying anything, can you or someone you trust visit in person?', [['yes', 'Yes, I can'], ['someone', 'Someone can go for me'], ['no', 'No']]],
+];
+export function videoRequestPayload(l, f, zone) {
+  const sale = l.purpose === 'buy', answers = { timeline: f.timeline, budget: f.budget, visit: f.visit };
+  answers[sale ? 'payment' : 'occupants'] = sale ? f.payment : f.occupants;
+  return { reference: l.reference, slot: f.slot, name: f.name.trim(), email: f.email.trim(), whatsapp: f.whatsapp.trim(), timezone: zone,
+    answers, message: f.message.trim(), rules: f.rules === true, consent: f.consent === true, website: f.website || '' };
+}
+const slotCache = {};
+/** { phase: 'loading' | 'ready', slots } for a listing; an empty list when video booking is not open. */
+export function useOwnerSlots(React, reference) {
+  const [state, setState] = React.useState(() => slotCache[reference] ? { phase: 'ready', slots: slotCache[reference] } : { phase: reference ? 'loading' : 'ready', slots: [] });
+  React.useEffect(() => {
+    const url = (window.DWELLHUNT_VIEWING || {}).ownerSlotsUrl;
+    if (!reference || slotCache[reference]) return undefined;
+    if (!url) { setState({ phase: 'ready', slots: [] }); return undefined; }
+    let live = true;
+    fetch(url + '?ref=' + encodeURIComponent(reference), { headers: { Accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : { slots: [] }).catch(() => ({ slots: [] }))
+      .then(body => { const slots = Array.isArray(body.slots) ? body.slots.filter(s => typeof s === 'string' && Date.parse(s) > Date.now()) : [];
+        slotCache[reference] = slots; if (live) setState({ phase: 'ready', slots }); });
+    return () => { live = false; };
+  }, [reference]);
+  return state;
+}
+const VR_ERRORS = { SLOT_TAKEN: 'Sorry, that time was just taken. Please pick another time.', ALREADY_REQUESTED: 'You have already asked for a video viewing of this home. Check your email for the details.',
+  TOO_MANY_REQUESTS: 'You have several open video viewing requests. Please wait for an answer before asking for more.', NOT_OPEN: 'Video viewings are not open for this home right now. Please send an enquiry instead.',
+  LISTING_NOT_AVAILABLE: 'Video viewings are not open for this home right now. Please send an enquiry instead.', HUMAN_VERIFICATION_REQUIRED: 'The security check did not complete. Please try again.' };
+
+export function createVideoBooking(React) {
+  const h = React.createElement;
+  return function VideoBooking({ listing: l, slots, onBack }) {
+    const sale = l.purpose === 'buy', zone = buyerTimeZone(), colombo = zone === 'Asia/Colombo';
+    const days = React.useMemo(() => groupSlots(slots, zone), [slots, zone]);
+    const [day, setDay] = React.useState(0);
+    const [f, setF] = React.useState({ slot: '', name: '', email: '', whatsapp: '', timeline: '', payment: '', occupants: '', budget: '', visit: '', message: '', rules: false, consent: false });
+    const [state, setState] = React.useState({ phase: 'idle', message: '' });
+    const honeypot = React.useRef(null);
+    const set = key => event => setF(old => ({ ...old, [key]: key === 'rules' || key === 'consent' ? event.target.checked : event.target.value }));
+    const when = iso => `${slotDay(iso, zone)}, ${slotTime(iso, zone)}${colombo ? '' : ` your time (${slotTime(iso, 'Asia/Colombo')} in Sri Lanka)`}`;
+    const submit = async event => {
+      event.preventDefault();
+      const questions = VR_QUESTIONS(sale);
+      if (!f.slot) { setState({ phase: 'error', message: 'Please choose a time.' }); return; }
+      if (!f.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()) || f.whatsapp.replace(/\D/g, '').length < 8) { setState({ phase: 'error', message: 'Please add your name, email and WhatsApp number with the country code.' }); return; }
+      if (questions.some(([key]) => !f[key])) { setState({ phase: 'error', message: 'Please answer the four short questions.' }); return; }
+      if (!f.rules || !f.consent) { setState({ phase: 'error', message: 'Please tick both boxes at the end.' }); return; }
+      const url = (window.DWELLHUNT_VIEWING || {}).viewingRequestUrl;
+      if (!url) { setState({ phase: 'error', message: VR_ERRORS.NOT_OPEN }); return; }
+      setState({ phase: 'sending', message: '' });
+      try {
+        const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(videoRequestPayload(l, { ...f, website: honeypot.current ? honeypot.current.value : '' }, zone)) });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || body.ok !== true) { if (body.code === 'SLOT_TAKEN') delete slotCache[l.reference]; throw new Error(body.code || 'send'); }
+        setState({ phase: 'done', message: '' });
+      } catch (error) { setState({ phase: 'error', message: VR_ERRORS[error.message] || 'Your request could not be sent. Please try again, or send an enquiry instead.' }); }
+    };
+    if (state.phase === 'done') return h('div', { className: 'dh-ol-enquiry dh-ol-enquiry-done', role: 'status' },
+      h('strong', null, 'Video viewing requested'),
+      h('p', null, `You asked for ${when(f.slot)}. The owner will answer within 12 hours, and we will email you the video call link if they accept. We've emailed you a confirmation.`));
+    const current = days[Math.min(day, days.length - 1)];
+    return h('form', { className: 'dh-ol-enquiry dh-vb', onSubmit: submit, noValidate: true, 'aria-labelledby': 'dh-vb-title' },
+      h('h3', { id: 'dh-vb-title' }, 'Book a video viewing'),
+      h('p', { className: 'dh-ol-enquiry-note' }, 'The owner shows you the home on a 30-minute video call. Pick a time, answer four short questions, and the owner confirms within 12 hours.'),
+      h('p', { className: 'dh-vb-zone' }, colombo ? 'Times are Sri Lanka time.' : `Times are shown in your time zone (${zone}).`),
+      h('div', { className: 'dh-vb-days', role: 'tablist', 'aria-label': 'Day' }, days.map((d, n) => h('button', { key: d.day, type: 'button', role: 'tab',
+        'aria-selected': n === day ? 'true' : 'false', className: 'dh-vb-day', onClick: () => setDay(n) }, d.day))),
+      current && h('div', { className: 'dh-vb-times' }, current.slots.map(iso => h('button', { key: iso, type: 'button', className: 'dh-vb-time',
+        'aria-pressed': f.slot === iso ? 'true' : 'false', title: colombo ? '' : `${slotTime(iso, 'Asia/Colombo')} in Sri Lanka`, onClick: () => setF(old => ({ ...old, slot: iso })) }, slotTime(iso, zone)))),
+      f.slot && h('p', { className: 'dh-vb-picked', role: 'status' }, '✓ ', when(f.slot)),
+      h('div', { className: 'dh-ol-enquiry-row' },
+        h('label', null, 'Your name', h('input', { value: f.name, onChange: set('name'), autoComplete: 'name', required: true })),
+        h('label', null, 'Email', h('input', { type: 'email', value: f.email, onChange: set('email'), autoComplete: 'email', required: true }))),
+      h('label', null, 'WhatsApp number (with country code)', h('input', { type: 'tel', value: f.whatsapp, onChange: set('whatsapp'), autoComplete: 'tel', placeholder: '+94 77 123 4567', required: true })),
+      VR_QUESTIONS(sale).map(([key, legend, options]) => h('fieldset', { key, className: 'dh-ol-enquiry-viewing dh-vb-q' }, h('legend', null, legend),
+        options.map(([value, label]) => h('label', { key: value }, h('input', { type: 'radio', name: 'dh-vb-' + key, value, checked: f[key] === value, onChange: set(key) }), h('span', null, label))))),
+      h('label', null, 'Anything the owner should know? (optional)', h('textarea', { rows: 2, value: f.message, onChange: set('message'), maxLength: 600 })),
+      h('label', { className: 'dh-ol-enquiry-consent' }, h('input', { type: 'checkbox', checked: f.rules, onChange: set('rules') }),
+        h('span', null, 'I will not record the call. I understand DwellHunt never asks for an advance or deposit before I (or someone I trust) visit in person and a lawyer checks the deed.')),
+      h('label', { className: 'dh-ol-enquiry-consent' }, h('input', { type: 'checkbox', checked: f.consent, onChange: set('consent') }),
+        h('span', null, 'I agree that DwellHunt may use these details to arrange the viewing. The owner sees my first name and answers, not my phone or email.')),
+      h('div', { className: 'dh-hp', 'aria-hidden': 'true' }, h('label', null, 'Leave empty', h('input', { ref: honeypot, type: 'text', tabIndex: -1, autoComplete: 'off', defaultValue: '' }))),
+      state.message && h('p', { className: 'dh-ol-enquiry-error', role: 'alert' }, state.message),
+      h('button', { type: 'submit', className: 'dh-button', disabled: state.phase === 'sending' }, state.phase === 'sending' ? 'Sending…' : 'Request this time'),
+      onBack && h('button', { type: 'button', className: 'dh-text-button dh-vb-back', onClick: onBack }, 'None of these times work? Send an enquiry instead'));
+  };
+}
+
 export function referenceFromHash(hash) {
   const match = /^#owner-listing=(OL-\d{4}-\d{4})$/.exec(decodeURIComponent(String(hash || '')));
   return match ? match[1] : '';
@@ -66,6 +171,7 @@ function loadFeed() {
 export function createOwnerFeed(React) {
   const h = React.createElement;
   /** Enquiry form for agent listings. lead-turnstile.js adds the human check when this posts to leadUrl. */
+  const VideoBooking = createVideoBooking(React);
   function AgentEnquiry({ listing: l }) {
     const owner = !isAgentListing(l);
     const agency = (l.contact && l.contact.displayName) || (owner ? 'the owner' : 'the agent');
@@ -75,7 +181,13 @@ export function createOwnerFeed(React) {
       message: owner ? `Hello, I'm interested in renting "${l.title}". Is it still available?` : `Hello, I'm interested in "${l.title}". Please send me more details.` });
     const [state, setState] = React.useState({ phase: 'idle', message: '' });
     const honeypot = React.useRef(null);
+    // With free times from the owner, "Video call" opens the booking form; "None of these times work?" comes back here.
+    const times = useOwnerSlots(React, video ? l.reference : '');
+    const [pickTimes, setPickTimes] = React.useState(true);
     const set = key => event => setF(old => ({ ...old, [key]: key === 'consent' ? event.target.checked : event.target.value }));
+    if (video && f.viewing === 'video' && pickTimes && times.slots.length) return h('div', null,
+      h('button', { type: 'button', className: 'dh-text-button dh-vb-back', onClick: () => setF(old => ({ ...old, viewing: 'in-person' })) }, '← View in person or ask a question instead'),
+      h(VideoBooking, { listing: l, slots: times.slots, onBack: () => setPickTimes(false) }));
     const submit = async event => {
       event.preventDefault();
       if (honeypot.current && honeypot.current.value) { setState({ phase: 'done', message: '' }); return; }
@@ -117,7 +229,8 @@ export function createOwnerFeed(React) {
       state.message && h('p', { className: 'dh-ol-enquiry-error', role: 'alert' }, state.message),
       h('button', { type: 'submit', className: 'dh-button', disabled: state.phase === 'sending' }, state.phase === 'sending' ? 'Sending…' : 'Send enquiry'));
   }
-  const ListingPage = createListingPage(React, { AgentEnquiry, hasEnquiryForm, CATEGORY, safeImage, ownerPriceText, ownerPlace, ownerFacts, ownerEnquiryUrl, isAgentListing });
+  const useSlots = reference => useOwnerSlots(React, reference);
+  const ListingPage = createListingPage(React, { AgentEnquiry, VideoBooking, useSlots, hasEnquiryForm, CATEGORY, safeImage, ownerPriceText, ownerPlace, ownerFacts, ownerEnquiryUrl, isAgentListing });
 
   return function OwnerFeed() {
     const [listings, setListings] = React.useState([]);

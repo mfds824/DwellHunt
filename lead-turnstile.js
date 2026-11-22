@@ -1,4 +1,4 @@
-/* Adds a Cloudflare human check to the enquiry form and the "Report this listing" form, and sends them to the DwellHunt Production Worker. */
+/* Adds a Cloudflare human check to the enquiry form, the video viewing request form and the "Report this listing" form, and sends them to the DwellHunt Production Worker. */
 (() => {
   'use strict';
   const config = window.DWELLHUNT_VIEWING || {};
@@ -66,6 +66,7 @@
 
   const LEAD = { action: 'lead', title: 'Verify your enquiry', message: 'Complete the security check to send your enquiry.' };
   const REPORT = { action: 'listing_report', title: 'Verify your report', message: 'Complete the security check to send your report.' };
+  const VIEWING = { action: 'viewing_request', title: 'Verify your request', message: 'Complete the security check to send your video viewing request.' };
   const allowed = (value, path) => {
     try {
       const url = new URL(value);
@@ -76,10 +77,11 @@
   };
   const target = allowed(config.leadUrl, '/api/dwellhunt/leads');
   const reportTarget = allowed(config.listingReportUrl, '/api/dwellhunt/listing-report');
+  const viewingTarget = allowed(config.viewingRequestUrl, '/api/dwellhunt/viewing-requests');
 
   window.fetch = async (input, init = {}) => {
     const requested = input instanceof Request ? input.url : String(input);
-    const kind = target && requested === target ? LEAD : reportTarget && requested === reportTarget ? REPORT : null;
+    const kind = target && requested === target ? LEAD : reportTarget && requested === reportTarget ? REPORT : viewingTarget && requested === viewingTarget ? VIEWING : null;
     if (!kind) return originalFetch(input, init);
     if (typeof init.body !== 'string') throw new Error('Invalid request. Please retry.');
     const payload = JSON.parse(init.body);

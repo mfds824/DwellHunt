@@ -209,15 +209,20 @@ export function createListingPage(React, d) {
   function ContactCard({ listing: l }) {
     const agent = d.isAgentListing(l);
     const name = (l.contact && l.contact.displayName) || (agent ? 'the agent' : 'the owner');
+    // Sale listings have no enquiry form: with free times from the owner, they show the video booking form instead of the WhatsApp link.
+    const saleVideo = !agent && l.videoViewing === true && !d.hasEnquiryForm(l);
+    const times = d.useSlots ? d.useSlots(saleVideo ? l.reference : '') : { slots: [] };
+    const booking = saleVideo && d.VideoBooking && times.slots.length > 0;
     return h('div', { className: 'dh-lp-contact', id: 'dh-lp-contact' },
       h('p', { className: 'dh-lp-contact-price' }, d.ownerPriceText(l)),
+      booking && h(d.VideoBooking, { listing: l, slots: times.slots }),
       d.hasEnquiryForm(l) ? h(d.AgentEnquiry, { listing: l }) : h('div', { className: 'dh-lp-contact-owner' },
         h('h3', null, `Contact ${name} through DwellHunt`),
         h('p', null, 'DwellHunt verified this owner and passes your message on, so their phone number stays private.')),
       h('div', { className: 'dh-lp-contact-actions' },
         h('a', { className: d.hasEnquiryForm(l) ? 'dh-text-button' : 'dh-button', href: d.ownerEnquiryUrl(l), target: '_blank', rel: 'noopener noreferrer' }, d.hasEnquiryForm(l) ? 'Or ask DwellHunt on WhatsApp' : 'Enquire on WhatsApp'),
         h('a', { className: 'dh-text-button', href: d.ownerEnquiryUrl(l, 'viewing'), target: '_blank', rel: 'noopener noreferrer' }, 'Request a viewing'),
-        !agent && l.videoViewing && !d.hasEnquiryForm(l) &&
+        saleVideo && !booking &&
           h('a', { className: 'dh-text-button', href: d.ownerEnquiryUrl(l, 'video'), target: '_blank', rel: 'noopener noreferrer' }, 'Request a video viewing')),
       h('p', { className: 'dh-lp-fine' }, `Ref ${l.reference}`));
   }
