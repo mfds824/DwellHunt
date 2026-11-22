@@ -7,6 +7,8 @@
     <meta name="referrer" content="no-referrer" />
     <title>Video Viewing Times — DwellHunt</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <!-- Telegram Mini App support: lets the page close itself and return to the Owners bot chat after saving. -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root { --ink: #1c2b24; --muted: #4b5d55; --brand: #064e3b; --accent: #047857; --line: #dbe5dc; --bg: #f5f7f3; --card: #ffffff;
         --chip: #eef5ef; --on: #047857; --warn: #9a3412; --warn-bg: #fff4ec; }
@@ -68,6 +70,7 @@
             <button class="pill" id="clear" type="button">Clear all</button>
           </div>
           <div id="state" class="banner hidden" role="status"></div>
+          <a id="back" class="pill hidden" href="https://t.me/PropertyOwnerBot" style="display:inline-block;margin-top:12px;text-decoration:none">← Back to Telegram</a>
         </section>
         <div id="days"></div>
       </div>
@@ -83,7 +86,17 @@
         var TIMES = []; for (var m = 8 * 60; m < 20 * 60; m += 30) TIMES.push(('0' + Math.floor(m / 60)).slice(-2) + ('0' + m % 60).slice(-2));
         var PARTS = [['Morning', '0800', '1200'], ['Afternoon', '1200', '1600'], ['Evening', '1600', '2000']];
         var $ = function (id) { return document.getElementById(id); };
-        var q = {}; location.hash.slice(1).split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); });
+        // The bot puts r, w and k in the query; older links had them in the # part. Telegram's own launch data is ignored.
+        var q = {}; (location.search.slice(1) + '&' + location.hash.slice(1)).split('&').forEach(function (kv) { var i = kv.indexOf('='); var k = kv.slice(0, i);
+          if (i > 0 && /^(r|w|k|api)$/.test(k) && !q[k]) { try { q[k] = decodeURIComponent(kv.slice(i + 1)); } catch (e) {} } });
+        // Inside Telegram (Mini App): full height, and close after saving so the owner is back in the chat.
+        var tg = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData ? window.Telegram.WebApp : null;
+        if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+        function finish() {
+          if (tg) { setTimeout(function () { try { tg.close(); } catch (e) {} }, 1200); return; }
+          // A normal browser tab: try to close it; if the browser refuses, offer the way back.
+          setTimeout(function () { try { window.close(); } catch (e) {} $('back').classList.remove('hidden'); }, 1200);
+        }
         var url = q.api === 'dev' ? API.dev : API.live;
         var picked = {}, data = null, dirty = false, busy = false;
 
@@ -166,7 +179,7 @@
           call(op, extra).then(function (r) {
             busy = false; $('save').textContent = 'Save times';
             if (!r.ok) { refresh(); say('warn', MESSAGES[r.code] || 'Could not save. Please check your connection and try again.'); return; }
-            show(r); say(r.paused ? 'warn' : 'ok', done(r));
+            show(r); say(r.paused ? 'warn' : 'ok', done(r) + (tg ? ' Returning to Telegram…' : '')); finish();
           });
         }
         $('save').addEventListener('click', function () { act('save', { slots: Object.keys(picked).sort() }, function (r) {
