@@ -3,9 +3,9 @@ import { OWNER_STEPS, CATEGORY_LABELS, APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_T
   validatePhotoCount, safeUploadUrl } from './owner-listing-model.js?v=20261123-ap1';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 import { createCountryCodePicker } from './country-code-picker.js?v=20261123-cc1';
-import { createPriceInput } from './price-input.js';
+import { createPriceInput } from './price-input.js?v=20261123-pw1';
 import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261123-ap1';
-import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261123-ap1';
+import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261123-pw1';
 
 const primary = 'px-6 py-3 rounded-xl bg-emerald-900 hover:bg-emerald-800 text-white font-bold text-xs disabled:opacity-40';
 const secondary = 'px-5 py-2.5 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50';
@@ -210,14 +210,15 @@ export function createOwnerListing(React) {
         field('saleAvailability', 'Availability', { options: ['Available now', 'Available on agreement', 'Under construction'] }))
       : h(React.Fragment, null,
         field('rentalType', 'Type of rental', { options: [['long-term', 'Long-term rental (months or years)'], ['short-stay', 'Short stay (nightly)']] }),
-        shortStay ? grid(field('currency', 'Currency', { options: ['LKR', 'USD', 'GBP', 'AED'] }), field('price', `Nightly rate (${d.currency})`, { type: 'number', min: 1, step: 'any', inputMode: 'decimal' }),
+        shortStay ? grid(field('currency', 'Currency', { options: ['LKR', 'USD', 'GBP', 'AED'] }), h(PriceInput, { value: String(d.price ?? ''), onChange: value => change('price', value), currency: d.currency, label: 'Nightly rate', error: errors.price, className: control }),
             field('minimumDuration', 'Minimum nights', { type: 'number', min: 1, step: 1 }), field('checkInTime', 'Check-in from', { type: 'time' }))
           : h(React.Fragment, null, grid(field('currency', 'Currency', { options: ['LKR', 'USD', 'GBP', 'AED'] }),
-            field('price', `Rent (${d.currency})`, { type: 'number', min: 1, step: 'any', inputMode: 'decimal' }),
+            h(PriceInput, { value: String(d.price ?? ''), onChange: value => change('price', value), currency: d.currency, label: 'Rent', error: errors.price, className: control }),
             field('billingPeriod', 'Rent is paid', { options: [['month', 'Monthly'], ['year', 'Yearly']] }),
             field('minimumDuration', 'Minimum lease (months)', { type: 'number', min: 1, step: 1 }),
             field('advanceMonths', 'Advance (months of rent)', { type: 'number', min: 0, max: 24, step: 1, hint: 'Rent paid in advance before moving in. Enter 0 if none.' }),
-            field('securityDeposit', `Refundable security deposit (${d.currency})`, { type: 'number', min: 0, step: 'any', optional: true }),
+            h(PriceInput, { id: 'dh-owner-securityDeposit', name: 'securityDeposit', required: false, value: String(d.securityDeposit ?? ''),
+              onChange: value => change('securityDeposit', value), currency: d.currency, label: 'Refundable security deposit', error: errors.securityDeposit, className: control }),
             field('noticePeriod', 'Notice period (months)', { type: 'number', min: 0, step: 1, optional: true }),
             field('availableFrom', 'Available from', { type: 'date' })),
             checks('tenantTypes', 'Suitable for (optional)', TENANT_TYPES),

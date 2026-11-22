@@ -36,16 +36,45 @@ function divided(raw, places) {
   const trimmed = decimals.replace(/0+$/, '');
   return formatPriceInput(integer.replace(/^0+(?=\d)/, '') + (trimmed ? '.' + trimmed : ''));
 }
+// The amount in words, as Sri Lankans say prices: lakhs below ten million ("One lakh fifty thousand rupees"), then
+// millions ("Twenty-five million five lakh rupees"). Other currencies use ordinary English words. Cents are left out.
+const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen',
+  'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+function upTo999(n) {
+  const hundred = Math.floor(n / 100), rest = n % 100;
+  const tail = rest < 20 ? ONES[rest] : TENS[Math.floor(rest / 10)] + (rest % 10 ? '-' + ONES[rest % 10] : '');
+  return [hundred ? ONES[hundred] + ' hundred' : '', tail].filter(Boolean).join(' ');
+}
+function english(n) { // up to 999,999,999,999
+  const out = [];
+  for (const [size, name] of [[1e9, 'billion'], [1e6, 'million'], [1e3, 'thousand']]) if (n >= size) { out.push(upTo999(Math.floor(n / size)) + ' ' + name); n %= size; }
+  if (n) out.push(upTo999(n));
+  return out.join(' ');
+}
+function lakhs(n) { // below ten million
+  const lakh = Math.floor(n / 100000), thousand = Math.floor((n % 100000) / 1000), rest = n % 1000;
+  return [lakh ? upTo999(lakh) + ' lakh' : '', thousand ? upTo999(thousand) + ' thousand' : '', rest ? upTo999(rest) : ''].filter(Boolean).join(' ');
+}
+const CURRENCY_WORDS = { LKR: 'rupees', USD: 'US dollars', GBP: 'pounds', AED: 'dirhams' };
+export function priceInWords(raw, currency = 'LKR') {
+  const n = Math.floor(Number(String(raw ?? '').replace(/[,\s]/g, '')));
+  if (!Number.isFinite(n) || n <= 0 || n >= 1e12) return '';
+  const text = currency !== 'LKR' ? english(n) : n < 1e7 ? lakhs(n) : english(Math.floor(n / 1e6)) + ' million' + (n % 1e6 ? ' ' + lakhs(n % 1e6) : '');
+  return text.charAt(0).toUpperCase() + text.slice(1) + ' ' + (CURRENCY_WORDS[currency] || currency);
+}
 export function priceSummary(raw, currency) {
   if (!/^\d*(?:\.\d*)?$/.test(String(raw)) || !/\d/.test(raw)) return 'Enter an amount to see its value.';
   const integer = BigInt(raw.split('.')[0] || '0');
-  if (integer >= 1000000000n) return `${currency} ${divided(raw, 9)} billion · ${divided(raw, 6)} million`;
-  if (integer >= 1000000n) return `${currency} ${divided(raw, 6)} million`;
-  return `${currency} ${divided(raw, 0)}`;
+  const words = priceInWords(raw, currency), said = words ? ' · ' + words : '';
+  if (integer >= 1000000000n) return `${currency} ${divided(raw, 9)} billion · ${divided(raw, 6)} million` + said;
+  if (integer >= 1000000n) return `${currency} ${divided(raw, 6)} million` + said;
+  return `${currency} ${divided(raw, 0)}` + said;
 }
 export function createPriceInput(React) {
   const h = React.createElement;
-  return function PriceInput({ value, onChange, currency, label, error, className }) {
+  // id / name let one form use several price boxes (sale price, rent, nightly rate, deposit).
+  return function PriceInput({ value, onChange, currency, label, error, className, id = 'dh-owner-price', name = 'price', required = true, hint }) {
     const input = React.useRef(null), cursor = React.useRef(null);
     React.useLayoutEffect(() => {
       if (cursor.current && input.current === document.activeElement) input.current.setSelectionRange(cursor.current.start, cursor.current.end);
@@ -59,9 +88,9 @@ export function createPriceInput(React) {
       onChange(edit.raw);
     };
     return h('div', { className: 'dh-owner-field' },
-      h('label', { htmlFor: 'dh-owner-price', className: 'block text-xs font-bold text-stone-700 mb-2' }, `${label} (required)`),
-      h('input', { ref: input, id: 'dh-owner-price', name: 'price', type: 'text', inputMode: 'decimal', value: formatPriceInput(value), className, required: true,
-        'aria-invalid': !!error, 'aria-describedby': `dh-owner-price-summary${error ? ' dh-owner-price-error' : ''}`,
+      h('label', { htmlFor: id, className: 'block text-xs font-bold text-stone-700 mb-2' }, required ? `${label} (required)` : `${label} (optional)`),
+      h('input', { ref: input, id, name, type: 'text', inputMode: 'decimal', value: formatPriceInput(value), className, required,
+        'aria-invalid': !!error, 'aria-describedby': `${id}-summary${error ? ` ${id}-error` : ''}`,
         onChange: event => {
           const element = event.target;
           const edit = formatPriceEdit(element.value, element.selectionStart, element.selectionEnd);
@@ -74,7 +103,8 @@ export function createPriceInput(React) {
           const edit = deletePriceSeparator(element.value, element.selectionStart, event.key);
           if (edit) { event.preventDefault(); apply(element, edit); }
         } }),
-      h('p', { id: 'dh-owner-price-summary', className: 'dh-owner-hint dh-owner-price-summary', role: 'status', 'aria-live': 'polite' }, priceSummary(value, currency)),
-      error && h('p', { id: 'dh-owner-price-error', className: 'dh-owner-error' }, error));
+      h('p', { id: `${id}-summary`, className: 'dh-owner-hint dh-owner-price-summary', role: 'status', 'aria-live': 'polite' }, priceSummary(value, currency)),
+      hint && h('p', { className: 'dh-owner-hint' }, hint),
+      error && h('p', { id: `${id}-error`, className: 'dh-owner-error' }, error));
   };
 }
