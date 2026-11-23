@@ -27,3 +27,8 @@
   --color-stone-900: #0f1e33;
   --color-stone-950: #08111f;
 }
+
+/* Soft champagne page background (24 Nov 2026): pages are pale gold, cards and form fields stay white, navy carries
+   buttons and text. Gold #c9a24d is reserved for small details (badges, dividers). */
+:root { --dh-champagne: #f6efe0; --dh-gold: #c9a24d; }
+body, #root > .min-h-screen { background-color: var(--dh-champagne) !important; }

@@ -1,5 +1,5 @@
 /* Full-page listing view (listing-page.js). Opens over the homepage at #owner-listing=OL-…. */
-.dh-lp { position: fixed; inset: 0; z-index: 80; background: #fff; overflow-y: auto; color: #0f1e33; outline: none; -webkit-overflow-scrolling: touch; }
+.dh-lp { position: fixed; inset: 0; z-index: 80; background: #f6efe0; overflow-y: auto; color: #0f1e33; outline: none; -webkit-overflow-scrolling: touch; }
 .dh-lp-bar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px clamp(16px, 3vw, 32px); background: rgba(255,255,255,.96); border-bottom: 1px solid #e3e6e9; backdrop-filter: blur(6px); }
 .dh-lp-back { border: 0; background: none; font: inherit; font-weight: 800; color: #0b2a4a; cursor: pointer; min-height: 40px; padding: 0; }
 .dh-lp-bar-actions { display: flex; align-items: center; gap: 8px; }

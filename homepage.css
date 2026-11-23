@@ -7,7 +7,7 @@
   --dh-green: #0b2a4a;
   --dh-line: #d6e0ec;
   color: var(--dh-ink);
-  background: #f5f8fc;
+  background: #f6efe0; /* soft champagne page background (brand guide) */
 }
 .dh-home {
   font-size: 15px;
