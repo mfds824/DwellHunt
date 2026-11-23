@@ -1,0 +1,29 @@
+/* DwellHunt brand colours: navy and white (24 Nov 2026).
+   The site's Tailwind styles use the "emerald" and "stone" colour scales. Redefining them here (loaded after style.css)
+   turns every emerald button, link and highlight into the navy/blue scale and every warm grey into a cool blue-grey,
+   without touching the hundreds of places that use them. Main navy #0b2a4a, accent blue #1d6fd8 (see brand guide). */
+:root {
+  --color-emerald-50: #eff5fd;
+  --color-emerald-100: #dce9fa;
+  --color-emerald-200: #bcd5f5;
+  --color-emerald-300: #8db8ef;
+  --color-emerald-400: #5b9bec;
+  --color-emerald-500: #2f80e4;
+  --color-emerald-600: #1d6fd8;
+  --color-emerald-700: #165bb8;
+  --color-emerald-800: #11458c;
+  --color-emerald-900: #0b2a4a;
+  --color-emerald-950: #071c33;
+
+  --color-stone-50: #f8fafc;
+  --color-stone-100: #f1f5f9;
+  --color-stone-200: #e2e8f0;
+  --color-stone-300: #cbd5e1;
+  --color-stone-400: #94a3b8;
+  --color-stone-500: #64748b;
+  --color-stone-600: #475569;
+  --color-stone-700: #334155;
+  --color-stone-800: #1e293b;
+  --color-stone-900: #0f1e33;
+  --color-stone-950: #08111f;
+}

@@ -19,7 +19,7 @@
 .dh-country-option[aria-selected=true] { font-weight: 700; color: var(--color-emerald-950); }
 .dh-country-option-active { background: var(--color-emerald-50); outline: 1px solid var(--color-emerald-700); outline-offset: -1px; }
 .dh-country-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.dh-country-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #d1fae5; color: #065f46; font-size: 10px; font-weight: 700; vertical-align: 1px; }
+.dh-country-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #dbe9fb; color: #0f3a66; font-size: 10px; font-weight: 700; vertical-align: 1px; }
 .dh-country-code { color: var(--color-emerald-900); font-weight: 700; }
 .dh-owner-hint { color: var(--color-stone-500); font-size: 11px; margin-top: 6px; }
 .dh-owner-note { padding: 14px 16px; border: 1px solid var(--color-emerald-200); border-radius: 12px; background: var(--color-emerald-50); color: var(--color-emerald-950); font-size: 12px; }
@@ -73,18 +73,18 @@
 
 /* Owner Step 1: a chosen option is filled dark green with a tick, so the selection is unmistakable. */
 .dh-listing-choice[data-selected="true"] {
-  background-color: #064e3b;
-  border-color: #064e3b;
+  background-color: #0b2a4a;
+  border-color: #0b2a4a;
   color: #ffffff;
   box-shadow: 0 0 0 4px rgba(6, 78, 59, 0.18);
 }
 .dh-listing-choice[data-selected="true"] .dh-listing-check {
   background: #ffffff;
-  color: #064e3b;
+  color: #0b2a4a;
 }
 
 /* Narrow phones: three option cards per row, so the tick sits on the card's corner, clear of the label. */
 @media (max-width: 479px) {
   .dh-listing-choice { padding-inline: 10px; }
-  .dh-listing-choice[data-selected="true"] .dh-listing-check { top: -7px; right: -7px; transform: none; width: 20px; height: 20px; font-size: 11px; background: #064e3b; color: #ffffff; border: 2px solid #ffffff; }
+  .dh-listing-choice[data-selected="true"] .dh-listing-check { top: -7px; right: -7px; transform: none; width: 20px; height: 20px; font-size: 11px; background: #0b2a4a; color: #ffffff; border: 2px solid #ffffff; }
 }

@@ -1,64 +1,64 @@
 /* Verified owner listings: homepage section and detail dialog. Cards reuse the homepage .dh-property styles. */
-.dh-owner-feed { border-top: 1px solid #d8e1da; }
+.dh-owner-feed { border-top: 1px solid #d6e0ec; }
 .dh-ol-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(15, 30, 24, .55); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 24px 16px; }
 .dh-ol-dialog { position: relative; width: 100%; max-width: 760px; background: #fff; border-radius: 18px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.25); outline: none; }
-.dh-ol-close { position: absolute; top: 10px; right: 10px; z-index: 2; width: 44px; height: 44px; border-radius: 999px; border: 0; background: rgba(255,255,255,.92); font-size: 26px; line-height: 1; color: #172e25; cursor: pointer; }
-.dh-ol-gallery { position: relative; background: #e9efe9; }
+.dh-ol-close { position: absolute; top: 10px; right: 10px; z-index: 2; width: 44px; height: 44px; border-radius: 999px; border: 0; background: rgba(255,255,255,.92); font-size: 26px; line-height: 1; color: #0f1e33; cursor: pointer; }
+.dh-ol-gallery { position: relative; background: #e9ecef; }
 .dh-ol-gallery img { width: 100%; max-height: 440px; object-fit: cover; display: block; }
 .dh-ol-gallery-nav { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.92); border-radius: 999px; padding: 2px 8px; font-size: 13px; }
-.dh-ol-gallery-nav button { border: 0; background: none; font-size: 24px; min-width: 40px; min-height: 40px; cursor: pointer; color: #064e3b; }
-.dh-ol-body { padding: 22px 22px 28px; color: #172e25; }
+.dh-ol-gallery-nav button { border: 0; background: none; font-size: 24px; min-width: 40px; min-height: 40px; cursor: pointer; color: #0b2a4a; }
+.dh-ol-body { padding: 22px 22px 28px; color: #0f1e33; }
 .dh-ol-body h2 { font-size: 24px; line-height: 1.2; margin: 6px 0 4px; }
-.dh-ol-body .dh-price { font-size: 20px; font-weight: 800; color: #064e3b; margin: 8px 0; }
-.dh-ol-badge { display: inline-block; font-size: 12px; font-weight: 800; color: #064e3b; background: #dff3e8; border-radius: 999px; padding: 4px 10px; }
+.dh-ol-body .dh-price { font-size: 20px; font-weight: 800; color: #0b2a4a; margin: 8px 0; }
+.dh-ol-badge { display: inline-block; font-size: 12px; font-weight: 800; color: #0b2a4a; background: #e0e8f2; border-radius: 999px; padding: 4px 10px; }
 .dh-ol-facts { font-weight: 700; margin-top: 4px; }
-.dh-ol-note { font-size: 13px; color: #50665a; margin: 14px 0; }
+.dh-ol-note { font-size: 13px; color: #4a5b70; margin: 14px 0; }
 .dh-ol-specs { display: grid; grid-template-columns: minmax(110px, auto) 1fr; gap: 6px 16px; font-size: 14px; margin: 16px 0; }
-.dh-ol-specs dt { color: #50665a; }
+.dh-ol-specs dt { color: #4a5b70; }
 .dh-ol-specs dd { margin: 0; font-weight: 600; text-transform: none; }
 .dh-ol-description p { white-space: pre-line; font-size: 14px; margin: 0 0 10px; }
 .dh-ol-verified { font-size: 13px; margin: 12px 0 6px; }
-.dh-ol-verified summary { cursor: pointer; font-weight: 700; color: #064e3b; min-height: 32px; }
-.dh-ol-verified p { color: #50665a; margin: 6px 0 0; }
-.dh-ol-diligence { font-size: 12px; color: #50665a; background: #f6f8f6; border-left: 3px solid #d8e1da; padding: 8px 10px; margin: 10px 0 14px; }
+.dh-ol-verified summary { cursor: pointer; font-weight: 700; color: #0b2a4a; min-height: 32px; }
+.dh-ol-verified p { color: #4a5b70; margin: 6px 0 0; }
+.dh-ol-diligence { font-size: 12px; color: #4a5b70; background: #f6f7f8; border-left: 3px solid #d6e0ec; padding: 8px 10px; margin: 10px 0 14px; }
 .dh-footer-note { display: block; flex-basis: 100%; max-width: 640px; font-size: 12px; line-height: 1.5; opacity: .8; margin-top: 6px; }
 
 /* Enquiry form on agent listings (the human check is added by lead-turnstile.js when it sends). */
-.dh-ol-enquiry { display: grid; gap: 10px; background: #f6f8f6; border: 1px solid #d8e1da; border-radius: 16px; padding: 16px; margin: 14px 0; }
-.dh-ol-enquiry h3 { margin: 0; font-size: 15px; color: #064e3b; }
-.dh-ol-enquiry label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: #3f5148; }
-.dh-ol-enquiry input:not([type="checkbox"]), .dh-ol-enquiry textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid #cdd9ce; background: #fff; font: inherit; font-weight: 400; font-size: 14px; color: #1c2b24; }
+.dh-ol-enquiry { display: grid; gap: 10px; background: #f6f7f8; border: 1px solid #d6e0ec; border-radius: 16px; padding: 16px; margin: 14px 0; }
+.dh-ol-enquiry h3 { margin: 0; font-size: 15px; color: #0b2a4a; }
+.dh-ol-enquiry label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: #3d4d61; }
+.dh-ol-enquiry input:not([type="checkbox"]), .dh-ol-enquiry textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid #c9d6e6; background: #fff; font: inherit; font-weight: 400; font-size: 14px; color: #0f1e33; }
 .dh-ol-enquiry-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .dh-ol-enquiry-consent { display: flex !important; gap: 8px; align-items: flex-start; font-weight: 400 !important; }
-.dh-ol-enquiry-consent input { margin-top: 3px; accent-color: #064e3b; }
+.dh-ol-enquiry-consent input { margin-top: 3px; accent-color: #0b2a4a; }
 .dh-ol-enquiry-error { color: #b91c1c; font-size: 13px; margin: 0; }
-.dh-ol-enquiry-done p { margin: 4px 0 0; color: #3f5148; font-size: 14px; }
+.dh-ol-enquiry-done p { margin: 4px 0 0; color: #3d4d61; font-size: 14px; }
 .dh-ol-enquiry .dh-button { justify-self: start; }
 
 /* Monthly-payment budget switch (homepage search) and the loan estimate line on sale cards. */
-.dh-budget-mode { display: inline-flex; gap: 4px; padding: 4px; margin: 4px 0 10px; border-radius: 999px; background: #eef3ef; }
-.dh-budget-mode-button { border: 0; background: none; border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 800; color: #3f5148; cursor: pointer; min-height: 36px; }
-.dh-budget-mode-button[aria-pressed="true"] { background: #064e3b; color: #fff; }
-.dh-monthly-estimate { margin: 2px 0 0; font-size: 12px; font-weight: 700; color: #047857; }
+.dh-budget-mode { display: inline-flex; gap: 4px; padding: 4px; margin: 4px 0 10px; border-radius: 999px; background: #eef0f3; }
+.dh-budget-mode-button { border: 0; background: none; border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 800; color: #3d4d61; cursor: pointer; min-height: 36px; }
+.dh-budget-mode-button[aria-pressed="true"] { background: #0b2a4a; color: #fff; }
+.dh-monthly-estimate { margin: 2px 0 0; font-size: 12px; font-weight: 700; color: #1d6fd8; }
 .dh-ol-enquiry-viewing { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
-.dh-ol-enquiry-viewing legend { font-size: 12px; font-weight: 700; color: #3f5148; margin-bottom: 4px; padding: 0; }
-.dh-ol-enquiry .dh-ol-enquiry-viewing label { display: flex; gap: 6px; align-items: center; font-weight: 400; font-size: 13px; color: #1c2b24; }
-.dh-ol-enquiry .dh-ol-enquiry-viewing input { accent-color: #064e3b; width: auto; flex: none; margin: 0; }
+.dh-ol-enquiry-viewing legend { font-size: 12px; font-weight: 700; color: #3d4d61; margin-bottom: 4px; padding: 0; }
+.dh-ol-enquiry .dh-ol-enquiry-viewing label { display: flex; gap: 6px; align-items: center; font-weight: 400; font-size: 13px; color: #0f1e33; }
+.dh-ol-enquiry .dh-ol-enquiry-viewing input { accent-color: #0b2a4a; width: auto; flex: none; margin: 0; }
 .dh-ol-enquiry .dh-ol-enquiry-viewing span { white-space: nowrap; }
-.dh-ol-enquiry-note { margin: 0; font-size: 12px; color: #3f5148; background: #eef6f1; border-radius: 8px; padding: 8px 10px; }
+.dh-ol-enquiry-note { margin: 0; font-size: 12px; color: #3d4d61; background: #eef2f6; border-radius: 8px; padding: 8px 10px; }
 
 /* Video viewing booking: day tabs and 30-minute time buttons in the buyer's time zone. */
-.dh-vb-zone { margin: 0; font-size: 12px; color: #3f5148; }
+.dh-vb-zone { margin: 0; font-size: 12px; color: #3d4d61; }
 .dh-vb-days { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
-.dh-vb-day { flex: none; border: 1px solid #cdd9ce; background: #fff; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 700; color: #3f5148; cursor: pointer; }
-.dh-vb-day[aria-selected="true"] { background: #064e3b; border-color: #064e3b; color: #fff; }
+.dh-vb-day { flex: none; border: 1px solid #c9d6e6; background: #fff; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 700; color: #3d4d61; cursor: pointer; }
+.dh-vb-day[aria-selected="true"] { background: #0b2a4a; border-color: #0b2a4a; color: #fff; }
 .dh-vb-times { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
-.dh-vb-time { border: 1px solid #cdd9ce; background: #eef6f1; border-radius: 10px; padding: 8px 0; font: inherit; font-size: 14px; font-variant-numeric: tabular-nums; color: #1c2b24; cursor: pointer; }
-.dh-vb-time[aria-pressed="true"] { background: #047857; border-color: #047857; color: #fff; font-weight: 800; }
-.dh-vb-picked { margin: 0; font-size: 13px; font-weight: 700; color: #047857; }
+.dh-vb-time { border: 1px solid #c9d6e6; background: #eef2f6; border-radius: 10px; padding: 8px 0; font: inherit; font-size: 14px; font-variant-numeric: tabular-nums; color: #0f1e33; cursor: pointer; }
+.dh-vb-time[aria-pressed="true"] { background: #1d6fd8; border-color: #1d6fd8; color: #fff; font-weight: 800; }
+.dh-vb-picked { margin: 0; font-size: 13px; font-weight: 700; color: #1d6fd8; }
 .dh-vb .dh-ol-enquiry-viewing span { white-space: normal; }
 .dh-vb-back { justify-self: start; font-size: 13px; }
 .dh-vb-phone { display: grid; grid-template-columns: minmax(110px, 140px) 1fr; gap: 10px; align-items: start; }
 .dh-vb-phone .dh-country-picker label { font-size: 12px; margin-bottom: 4px; }
-.dh-vb-phone .dh-owner-hint { margin: 4px 0 0; font-size: 11px; color: #50665a; }
+.dh-vb-phone .dh-owner-hint { margin: 4px 0 0; font-size: 11px; color: #4a5b70; }
 @media (max-width: 380px) { .dh-vb-phone { grid-template-columns: 1fr; } }
