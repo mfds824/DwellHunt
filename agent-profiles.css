@@ -51,3 +51,16 @@
 .dh-ap-card-price { font-weight: 900; font-size: 15px; color: #0b2a4a; }
 .dh-ap-card-place { color: #627082; }
 .dh-ap-cta { display: grid; gap: 8px; justify-items: start; padding-top: 4px; border-top: 1px solid #eeeff1; padding: 16px 0 0; }
+
+/* Profile header (24 Nov 2026): name, agency, listing count, one small "DwellHunt Verified" badge, then only the
+   features the agent chose or DwellHunt confirmed, and the languages they speak. */
+.dh-ap-head { align-items: flex-start; }
+.dh-ap-head-text { min-width: 0; }
+.dh-ap-head h2 { font-family: "Playfair Display", Georgia, serif; font-weight: 700; color: #0b2a4a; }
+.dh-ap-agency { margin: 4px 0 0; color: #1d6fd8; font-weight: 700; font-size: 14px; }
+.dh-ap-areas b { color: #0f1e33; }
+.dh-ap-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.dh-ap-feature { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border: 1px solid #d6e0ec; border-radius: 6px; background: #fff;
+  color: #0b2a4a; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.dh-ap-feature svg { color: #1d6fd8; flex: none; }
+.dh-ap-langs { margin: 8px 0 0; color: #4a5b70; font-size: 13px; }

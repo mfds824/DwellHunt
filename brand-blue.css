@@ -32,3 +32,10 @@
    buttons and text. Gold #c9a24d is reserved for small details (badges, dividers). */
 :root { --dh-champagne: #f6efe0; --dh-gold: #c9a24d; }
 body, #root > .min-h-screen { background-color: var(--dh-champagne) !important; }
+
+/* "DwellHunt Verified" agent badge (verified-badge.js): navy shield with a gold check. */
+.dh-verified { display: inline-flex; align-items: center; gap: 6px; background: #0b2a4a; color: #ffffff; border-radius: 8px;
+  font-family: "Plus Jakarta Sans", Arial, sans-serif; font-weight: 700; line-height: 1; white-space: nowrap; vertical-align: middle; cursor: help; }
+.dh-verified-md { padding: 7px 12px; font-size: 13px; }
+.dh-verified-sm { padding: 4px 8px; font-size: 11px; gap: 4px; border-radius: 6px; }
+.dh-verified-icon { color: #c9a24d; flex: none; }

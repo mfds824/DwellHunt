@@ -88,3 +88,18 @@
 .dh-agent-telegram { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 14px 0 4px; padding: 12px 14px; border-radius: 12px; background: #eef2f6; }
 .dh-agent-telegram > p:first-child { flex: 1 1 260px; margin: 0; font-size: 14px; color: #0f1e33; }
 .dh-agent-telegram .dh-agent-meta { flex-basis: 100%; margin: 0; }
+
+/* Profile questions: languages and video viewings (24 Nov 2026). */
+.dh-agent-choices { border: 0; padding: 0; margin: 0; }
+.dh-agent-choices legend { font-size: 12px; font-weight: 700; color: #363f4a; margin-bottom: 6px; }
+.dh-agent-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dh-agent-chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #d6e0ec; border-radius: 999px; background: #fff; font-size: 13px; color: #0b2a4a; cursor: pointer; }
+.dh-agent-chip.is-on { background: #0b2a4a; border-color: #0b2a4a; color: #fff; }
+.dh-agent-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.dh-agent-chip:focus-within { outline: 2px solid #1d6fd8; outline-offset: 1px; }
+.dh-agent-check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5; color: #363f4a; }
+.dh-agent-check input { margin-top: 3px; width: 16px; height: 16px; accent-color: #0b2a4a; flex: none; }
+.dh-agent-check strong { color: #0b2a4a; }
+.dh-agent-check { padding: 14px 16px; border: 1px solid #d6e0ec; border-radius: 12px; background: #fff; cursor: pointer; }
+.dh-agent-check:has(input:checked) { border-color: #0b2a4a; background: #f8fafc; }
+.dh-agent-check-note { display: block; margin-top: 2px; color: #4a5b70; }

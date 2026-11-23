@@ -1,6 +1,7 @@
 // Full-page listing view for verified owner and agent listings (opened from the homepage feed at #owner-listing=OL-…).
 // Layout: photo collage + lightbox, price and key facts, highlights, facts & features, cost estimate, map, lister card,
 // and a sticky contact card. All contact still goes through DwellHunt (the agent enquiry form or DwellHunt's WhatsApp).
+import { verifiedBadge } from './verified-badge.js?v=20261124-vb2';
 const LABEL = {
   furnishing: { unfurnished: 'Unfurnished', 'semi-furnished': 'Partly furnished', 'fully-furnished': 'Fully furnished' },
   parkingType: { covered: 'covered', open: 'open', garage: 'garage', street: 'street' },
@@ -291,7 +292,7 @@ export function createListingPage(React, d) {
           h('main', { className: 'dh-lp-main' },
             h('p', { className: 'dh-lp-status' }, h('span', { className: 'dh-lp-dot', 'aria-hidden': 'true' }), l.purpose === 'buy' ? 'For sale' : 'For rent',
               l.negotiable && h('span', { className: 'dh-lp-pill' }, 'Price negotiable'),
-              h('span', { className: 'dh-lp-pill is-verified' }, agent ? '✓ Verified agent' : '✓ Verified owner')),
+              agent ? verifiedBadge(h, 'sm') : h('span', { className: 'dh-lp-pill is-verified' }, '✓ Verified owner')),
             h('div', { className: 'dh-lp-headline' },
               h('p', { className: 'dh-lp-price' }, d.ownerPriceText(l)),
               facts.length > 0 && h('ul', { className: 'dh-lp-facts' }, facts.map(([v, u], n) => h('li', { key: n }, h('strong', null, v), u ? ' ' + u : '')))),
@@ -326,7 +327,7 @@ export function createListingPage(React, d) {
               h('h2', null, 'Listed by'),
               h('div', { className: 'dh-lp-lister' },
                 h('span', { className: 'dh-lp-avatar', 'aria-hidden': 'true' }, String(lister).split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')),
-                h('div', null, h('strong', null, lister), h('p', null, agent ? '✓ Verified agent · enquiries go through DwellHunt' : '✓ Verified owner · DwellHunt handles every enquiry'),
+                h('div', null, h('strong', null, lister), h('p', null, agent ? 'Enquiries go through DwellHunt' : '✓ Verified owner · DwellHunt handles every enquiry'),
                   agent && l.agentId && h('button', { type: 'button', className: 'dh-ap-link', onClick: () => { location.hash = 'agent=' + l.agentId; } }, `View ${lister}’s profile →`))),
               h('details', { className: 'dh-ol-verified' }, h('summary', null, agent ? 'What does “verified agent” mean?' : 'What does “verified owner” mean?'),
                 h('p', null, agent ? 'DwellHunt checked this agent’s details before approving their account, and reviews each of their listings before it goes live. This is not a legal title check.'

@@ -1,6 +1,7 @@
 /* "List a property" page: a "Who's listing today?" chooser with agents first, the agent application, email-code
  * sign-in and the agent dashboard. Agents send listings through the owner form (owner-listing.js) with their session,
  * so every listing joins the same DwellHunt review. The backend is the Worker's /api/dwellhunt/agents/* routes. */
+import { verifiedBadge } from './verified-badge.js?v=20261124-vb2';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 
 const SESSION_KEY = 'dwellhunt_agent_session';
@@ -220,8 +221,11 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
     return (await uploadPropertyFile(file)).url;
   }
 
+  const AGENT_LANGUAGES = ['English', 'Sinhala', 'Tamil', 'Hindi', 'Mandarin', 'Arabic', 'Russian', 'German', 'French', 'Japanese'];
   function ProfileEditor({ session, profile, onSaved }) {
-    const [f, setF] = React.useState({ bio: profile.bio || '', areas: (profile.areas || []).join(', '), logo: profile.logo || '' });
+    const [f, setF] = React.useState({ bio: profile.bio || '', areas: (profile.areas || []).join(', '), logo: profile.logo || '',
+      videoViewings: profile.videoViewings === true, languages: Array.isArray(profile.languages) ? profile.languages : [] });
+    const toggleLanguage = l => setF(o => ({ ...o, languages: o.languages.includes(l) ? o.languages.filter(x => x !== l) : [...o.languages, l] }));
     const [state, setState] = React.useState({ busy: false, message: '', ok: false });
     const pick = React.useRef(null);
     const a = session.agent || {};
@@ -235,7 +239,8 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
     const save = async e => {
       e.preventDefault(); setState({ busy: true, message: '', ok: false });
       try {
-        await agentCall('profile', { session: session.session, bio: f.bio, areas: f.areas.split(',').map(x => x.trim()).filter(Boolean), logo: f.logo });
+        await agentCall('profile', { session: session.session, bio: f.bio, areas: f.areas.split(',').map(x => x.trim()).filter(Boolean), logo: f.logo,
+          videoViewings: f.videoViewings, languages: f.languages });
         setState({ busy: false, message: 'Profile saved. Buyers can see it now.', ok: true }); onSaved();
       } catch (error) { setState({ busy: false, message: error.message, ok: false }); }
     };
@@ -248,9 +253,15 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
         h('button', { type: 'button', className: secondary, onClick: () => pick.current && pick.current.click(), disabled: state.busy }, f.logo ? 'Change logo' : 'Add logo'),
         f.logo && h('button', { type: 'button', className: 'dh-agent-link', onClick: () => setF(o => ({ ...o, logo: '' })) }, 'Remove')),
       h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-bio' }, 'About your agency'),
-        h('textarea', { id: 'dh-agent-bio', rows: 3, maxLength: 600, value: f.bio, onChange: e => setF(o => ({ ...o, bio: e.target.value })), placeholder: 'What you specialise in, how long you have worked, languages you speak…' })),
-      h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-areas' }, 'Areas you cover (separate with commas)'),
+        h('textarea', { id: 'dh-agent-bio', rows: 3, maxLength: 600, value: f.bio, onChange: e => setF(o => ({ ...o, bio: e.target.value })), placeholder: 'What you specialise in and how long you have worked…' })),
+      h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-areas' }, 'Areas you specialise in (separate with commas)'),
         h('input', { id: 'dh-agent-areas', value: f.areas, onChange: e => setF(o => ({ ...o, areas: e.target.value })), placeholder: 'Colombo 05, Colombo 07, Rajagiriya' })),
+      h('fieldset', { className: 'dh-agent-field dh-agent-choices' }, h('legend', null, 'Languages you can speak with buyers'),
+        h('div', { className: 'dh-agent-chips' }, AGENT_LANGUAGES.map(l => h('label', { key: l, className: 'dh-agent-chip' + (f.languages.includes(l) ? ' is-on' : '') },
+          h('input', { type: 'checkbox', checked: f.languages.includes(l), onChange: () => toggleLanguage(l) }), l)))),
+      h('label', { className: 'dh-agent-check' },
+        h('input', { type: 'checkbox', checked: f.videoViewings, onChange: e => setF(o => ({ ...o, videoViewings: e.target.checked })) }),
+        h('span', null, h('strong', null, 'Offer video viewings'), h('span', { className: 'dh-agent-check-note' }, 'Host live video tours for buyers who are unable to visit in person. A “Video viewings” badge will appear on your public profile.'))),
       state.message && h('p', { role: 'status', className: state.ok ? 'dh-agent-notice' : 'dh-agent-error' }, state.message),
       h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Saving…' : 'Save profile'));
   }
@@ -343,7 +354,7 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
     return shell(
       h('section', { className: 'dh-agent-card' },
         h('div', { className: 'dh-agent-dash-head' },
-          h('div', null, h('p', { className: 'dh-agent-eyebrow' }, 'Agent portal · ✓ Verified agent'),
+          h('div', null, h('p', { className: 'dh-agent-eyebrow' }, 'Agent portal · ', verifiedBadge(h, 'sm')),
             h('h1', null, a.name || 'Your dashboard'), h('p', { className: 'dh-agent-lead' }, `${a.agency || ''}${a.id ? ' · ' + a.id : ''}`)),
           h('div', { className: 'dh-agent-dash-actions' },
             h('button', { type: 'button', className: primary, onClick: onCreate }, '+ New listing'),

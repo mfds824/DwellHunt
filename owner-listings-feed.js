@@ -1,6 +1,7 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
-import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261123-sc1";
+import { verifiedBadge } from './verified-badge.js?v=20261124-vb2';
+import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261124-vb2";
 import { createCountryCodePicker } from "./country-code-picker.js?v=20261123-cc1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
@@ -275,7 +276,7 @@ export function createOwnerFeed(React) {
           ownerFacts(l).length > 0 && h('p', null, ownerFacts(l).join(' · ')),
           isAgentListing(l) && l.agentId
             ? h('p', { className: 'dh-agency' }, 'Listed by ', h('button', { type: 'button', className: 'dh-ap-link', onClick: () => { location.hash = 'agent=' + l.agentId; } },
-                (l.contact && l.contact.displayName) || 'a verified agent'), ' · ✓ Verified agent')
+                (l.contact && l.contact.displayName) || 'a verified agent'), ' ', verifiedBadge(h, 'sm'))
             : h('p', { className: 'dh-agency' }, listerLabel(l)),
           h('div', { className: 'dh-card-actions' },
             h('button', { type: 'button', className: 'dh-text-button', onClick: () => show(l.reference) }, 'View details'),

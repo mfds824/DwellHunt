@@ -1,6 +1,7 @@
 /* Public agent profiles and posts (homepage "Verified agents" strip + "#agent=AG-…" profile page).
  * Data comes from the Worker's read-only /agents/public routes; agent email and phone are never public.
  * "Contact" sends a DwellHunt lead (lead-turnstile.js adds the human check) that the backend emails to the agent. */
+import { verifiedBadge } from './verified-badge.js?v=20261124-vb2';
 const isAgentId = id => /^AG-\d{4}-\d{4}$/.test(String(id || ''));
 export function agentFromHash(hash) {
   const m = /^#agent=(AG-\d{4}-\d{4})$/.exec(decodeURIComponent(String(hash || '')));
@@ -40,6 +41,33 @@ export function listingPlace(l) { const x = l.location || {}; return [x.building
 export function listingFromUrl(url) {
   const m = /#owner-listing=([A-Z]{2}-\d{4}-\d{4})$/.exec(decodeURIComponent(String(url || '')));
   return m ? m[1] : '';
+}
+
+/** "Speaks English, Sinhala and Tamil", or '' when the agent has not said. */
+export function languageLine(list) {
+  const l = (Array.isArray(list) ? list : []).filter(x => typeof x === 'string' && x);
+  if (!l.length) return '';
+  return 'Speaks ' + (l.length === 1 ? l[0] : l.slice(0, -1).join(', ') + ' and ' + l[l.length - 1]);
+}
+const FEATURE_ICONS = {
+  video: ['M15 10l4.553 -2.276a1 1 0 0 1 1.447 .894v6.764a1 1 0 0 1 -1.447 .894l-4.553 -2.276v-4z', 'M3 8a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z'],
+  area: ['M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0', 'M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z'],
+  agency: ['M3 21h18', 'M5 21v-14l8 -4v18', 'M19 21v-10l-6 -4', 'M9 9v.01', 'M9 12v.01', 'M9 15v.01', 'M9 18v.01'],
+};
+function feature(h, key, icon, label, title) {
+  return h('span', { key, className: 'dh-ap-feature', title },
+    h('svg', { viewBox: '0 0 24 24', width: 14, height: 14, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
+      FEATURE_ICONS[icon].map((d, i) => h('path', { key: i, d }))), label);
+}
+/** One small "DwellHunt Verified" badge, then only the features the agent chose (video viewings, specialist areas)
+ * or DwellHunt confirmed (registered agency). */
+export function profileBadges(h, agent) {
+  const areas = (agent.areas || []).filter(Boolean);
+  return [verifiedBadge(h, 'sm', 'v'),
+    agent.videoViewings === true && feature(h, 'video', 'video', 'Video viewings', 'This agent can show the property on a live video call.'),
+    areas.length > 0 && feature(h, 'area', 'area', 'Specialises in ' + areas.slice(0, 2).join(', ') + (areas.length > 2 ? ` +${areas.length - 2}` : ''), areas.join(', ')),
+    agent.registeredAgency === true && feature(h, 'agency', 'agency', 'Registered agency', 'This agency is registered with DwellHunt.'),
+  ].filter(Boolean);
 }
 
 export function createAgentProfiles(React) {
@@ -146,9 +174,11 @@ export function createAgentProfiles(React) {
         state === 'missing' && h('p', { role: 'status' }, 'This agent profile is not available.'),
         agent && h(React.Fragment, null,
           h('header', { className: 'dh-ap-head' }, avatar(agent, 'lg'),
-            h('div', null, h('h2', { id: 'dh-ap-name' }, agent.agency),
-              h('p', { className: 'dh-ap-verified' }, '✓ Verified agent', agent.name ? ` · ${agent.name}` : ''),
-              agent.areas && agent.areas.length > 0 && h('p', { className: 'dh-ap-areas' }, agent.areas.join(' · ')))),
+            h('div', { className: 'dh-ap-head-text' }, h('h2', { id: 'dh-ap-name' }, agent.name || agent.agency),
+              agent.name && agent.agency && h('p', { className: 'dh-ap-agency' }, agent.agency),
+              h('p', { className: 'dh-ap-areas' }, h('b', null, (agent.listings || []).length), ` active listing${(agent.listings || []).length === 1 ? '' : 's'}`),
+              h('div', { className: 'dh-ap-badges' }, profileBadges(h, agent)),
+              languageLine(agent.languages) && h('p', { className: 'dh-ap-langs' }, languageLine(agent.languages)))),
           agent.bio && h('p', { className: 'dh-ap-bio' }, agent.bio),
           h('div', { className: 'dh-ap-section' }, h('h3', null, `Live listings (${(agent.listings || []).length})`),
             (agent.listings || []).length ? h('div', { className: 'dh-ap-cards' }, agent.listings.map(l => h(ListingCard, { key: l.reference, listing: l, onOpen: openListing })))
