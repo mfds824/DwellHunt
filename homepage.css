@@ -1164,3 +1164,11 @@
   }
 }
 @keyframes dh-settle { from { opacity: .001; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+/* A section's settle animation keeps a transform, which would pin the full-screen listing page (position: fixed) to the
+   section instead of the screen. While a listing is open inside a section, that section does not animate. */
+.dh-home > section:has(.dh-lp) { animation: none !important; transform: none !important; opacity: 1 !important; }
+
+/* The menu bar slides up out of view while scrolling down, and back on scroll up (homepage.js). */
+.dh-home-header { transition: transform .25s ease; }
+.dh-home-header.dh-header-hidden { transform: translateY(-100%); }
+@media (prefers-reduced-motion: reduce) { .dh-home-header { transition: none; } }

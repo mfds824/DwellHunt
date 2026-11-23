@@ -30,13 +30,26 @@ export function createHomepage(
   function Header() {
     const store = useMarketplace();
     const [menuOpen, setMenuOpen] = React.useState(false);
+    // The menu bar slides away while scrolling down and comes back on the first scroll up (never while the menu is open).
+    const [hidden, setHidden] = React.useState(false);
+    React.useEffect(() => {
+      let last = window.scrollY;
+      const onScroll = () => {
+        const y = window.scrollY;
+        if (y < 120 || y < last - 4) setHidden(false);
+        else if (y > last + 4) setHidden(true);
+        last = y;
+      };
+      window.addEventListener("scroll", onScroll, { passive: true });
+      return () => window.removeEventListener("scroll", onScroll);
+    }, []);
     const browse = (purpose) => {
       store.setFilters({ ...defaults, purpose, category: "apartment" });
       go(store, "search");
     };
     return h(
       "header",
-      { className: "dh-home-header" },
+      { className: "dh-home-header" + (hidden && !menuOpen ? " dh-header-hidden" : ""), onFocus: () => setHidden(false) },
       h(
         "a",
         {
