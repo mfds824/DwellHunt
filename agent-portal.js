@@ -1,21 +1,33 @@
 /* "List a property" page: a "Who's listing today?" chooser with agents first, the agent application, email-code
  * sign-in and the agent dashboard. Agents send listings through the owner form (owner-listing.js) with their session,
  * so every listing joins the same DwellHunt review. The backend is the Worker's /api/dwellhunt/agents/* routes. */
+import { passwordKey, passwordProblem } from './password-strength.js?v=20261124-pw1';
 import { verifiedBadge } from './verified-badge.js?v=20261124-vb2';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 
 const SESSION_KEY = 'dwellhunt_agent_session';
 const WHATSAPP_URL = 'https://wa.me/94770153678?text=' + encodeURIComponent('Hi DwellHunt, I would like to list a property development.');
 
-export function loadAgentSession(storage = globalThis.localStorage) {
-  try {
-    const s = JSON.parse(storage.getItem(SESSION_KEY) || 'null');
-    if (s && /^[a-f0-9]{64}$/.test(s.session) && Date.parse(s.expires) > Date.now() && s.agent) return s;
-  } catch { /* nothing saved, or storage unavailable */ }
+/** "Keep me signed in" uses localStorage; otherwise the sign-in lives in sessionStorage and ends with the browser tab. */
+export function loadAgentSession(storage) {
+  const stores = storage ? [storage] : [() => globalThis.localStorage, () => globalThis.sessionStorage];
+  for (const entry of stores) {
+    try {
+      const s = JSON.parse((typeof entry === 'function' ? entry() : entry).getItem(SESSION_KEY) || 'null');
+      if (s && /^[a-f0-9]{64}$/.test(s.session) && Date.parse(s.expires) > Date.now() && s.agent) return s;
+    } catch { /* nothing saved, or storage unavailable */ }
+  }
   return null;
 }
-export function saveAgentSession(value, storage = globalThis.localStorage) { try { storage.setItem(SESSION_KEY, JSON.stringify(value)); } catch { /* private mode */ } }
-export function clearAgentSession(storage = globalThis.localStorage) { try { storage.removeItem(SESSION_KEY); } catch { /* ignore */ } }
+export function clearAgentSession(storage) {
+  for (const get of storage ? [() => storage] : [() => globalThis.localStorage, () => globalThis.sessionStorage]) {
+    try { get().removeItem(SESSION_KEY); } catch { /* ignore */ }
+  }
+}
+export function saveAgentSession(value, remember = true) {
+  clearAgentSession();
+  try { (remember ? globalThis.localStorage : globalThis.sessionStorage).setItem(SESSION_KEY, JSON.stringify(value)); } catch { /* private mode */ }
+}
 
 /** Friendly text for backend codes. */
 export function agentMessage(code) {
@@ -25,13 +37,16 @@ export function agentMessage(code) {
     INVALID_CODE: 'That code is not right. Check the latest email from DwellHunt and try again.',
     CODE_EXPIRED: 'That code has expired. Ask for a new code.',
     CODE_LOCKED: 'Too many wrong tries. Ask for a new code.',
+    INVALID_LOGIN: 'That email and password did not work. Check them, or sign in with an email code. After several wrong tries, password sign-in pauses for 15 minutes.',
+    PASSWORD_UNAVAILABLE: 'Password sign-in is not available right now. Please use an email code.',
+    CODE_REQUIRED: 'For your security, please sign in with a new email code before changing your password.',
     SIGNED_OUT: 'Your sign-in has ended. Please sign in again.',
     RATE_LIMITED: 'Too many requests just now. Please try again later.',
     BUSY_RETRY: 'DwellHunt is busy for a moment. Please complete the security check again and retry.',
   })[code] || 'Something went wrong on our side. Please try again in a few minutes, or message us on WhatsApp.';
 }
 
-const RETRYABLE = new Set(['verify', 'me', 'signout', 'profile', 'posts', 'posts/delete', 'telegram']);
+const RETRYABLE = new Set(['verify', 'password', 'me', 'signout', 'profile', 'posts', 'posts/delete', 'telegram']);
 /** POSTs to an agent route and returns the JSON body. Calls without a one-time human-check token are retried
  * a few times when the backend is briefly busy. Throws an Error whose message is safe to show. */
 export async function agentCall(path, body, fetchImpl = fetch, pause = ms => new Promise(r => setTimeout(r, ms))) {
@@ -100,56 +115,110 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
     h('label', { htmlFor: id }, label), h('input', { id, value, onChange: e => onChange(e.target.value), ...extra }));
   const shell = (...children) => h('div', { className: 'dh-owner dh-agent py-12 bg-stone-50 min-h-screen' }, h('div', { className: 'dh-agent-wrap' }, ...children));
 
-  function SignIn({ onSignedIn, onApply, onBack }) {
+  /** A password box with a Show/Hide button; autoComplete tells the browser when to offer to save or fill it. */
+  function PasswordField({ id, label, value, onChange, autoComplete, hint }) {
+    const [show, setShow] = React.useState(false);
+    return h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: id }, label),
+      h('div', { className: 'dh-agent-password' },
+        h('input', { id, name: 'password', type: show ? 'text' : 'password', value, onChange: e => onChange(e.target.value), autoComplete, maxLength: 128, required: true, 'aria-describedby': hint ? id + '-hint' : undefined }),
+        h('button', { type: 'button', onClick: () => setShow(v => !v), 'aria-label': show ? 'Hide password' : 'Show password' }, show ? 'Hide' : 'Show')),
+      hint && h('p', { id: id + '-hint', className: 'dh-agent-hint' }, hint));
+  }
+
+  /** start: "password" (normal) or "email" (an emailed code, used first time, as a backup and to change the password). */
+  function SignIn({ onSignedIn, onApply, onBack, start = 'password' }) {
     const [email, setEmail] = React.useState('');
+    const [password, setPassword] = React.useState('');
+    const [newPassword, setNewPassword] = React.useState('');
+    const [remember, setRemember] = React.useState(true);
     const [code, setCode] = React.useState('');
-    const [step, setStep] = React.useState('email');
+    const [step, setStep] = React.useState(start);
+    const [choose, setChoose] = React.useState(start === 'email'); // offer a new password after the code
+    const [pending, setPending] = React.useState(null);
     const [state, setState] = React.useState({ busy: false, message: '' });
     const check = React.useRef(null);
-    const [token, reset] = useHumanCheck(check, 'agent_signin', step === 'email');
+    const [token, reset] = useHumanCheck(check, 'agent_signin', (step === 'password' || step === 'email') && step);
+    const go = next => { setStep(next); setState({ busy: false, message: '' }); };
+    const problem = message => setState({ busy: false, message });
+    const emailOk = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+    const keep = r => { markKnown(); const session = { session: r.session, expires: r.expires, agent: r.agent }; saveAgentSession(session, remember); return session; };
+    const login = async event => {
+      event.preventDefault();
+      if (!emailOk()) return problem('Enter the email address you applied with.');
+      if (!password) return problem('Enter your password, or use an email code.');
+      if (!token) return problem('Please complete the security check.');
+      setState({ busy: true, message: '' });
+      try { onSignedIn(keep(await agentCall('login', { email: email.trim(), passwordKey: await passwordKey(password, email), remember, turnstile_token: token }))); }
+      catch (error) { reset(); problem(error.message); }
+    };
     const askCode = async event => {
       event.preventDefault();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setState({ busy: false, message: 'Enter the email address you applied with.' }); return; }
-      if (!token) { setState({ busy: false, message: 'Please complete the security check.' }); return; }
+      if (!emailOk()) return problem('Enter the email address you applied with.');
+      if (!token) return problem('Please complete the security check.');
       setState({ busy: true, message: '' });
-      try { await agentCall('code', { email: email.trim(), turnstile_token: token }); markKnown(); setStep('code'); setState({ busy: false, message: '' }); }
-      catch (error) { reset(); setState({ busy: false, message: error.message }); }
+      try { await agentCall('code', { email: email.trim(), turnstile_token: token }); markKnown(); go('code'); }
+      catch (error) { reset(); problem(error.message); }
     };
     const verify = async event => {
       event.preventDefault();
-      if (!/^\d{6}$/.test(code.replace(/\s/g, ''))) { setState({ busy: false, message: 'Enter the 6-digit code from the email.' }); return; }
+      if (!/^\d{6}$/.test(code.replace(/\s/g, ''))) return problem('Enter the 6-digit code from the email.');
       setState({ busy: true, message: '' });
       try {
-        const r = await agentCall('verify', { email: email.trim(), code: code.replace(/\s/g, '') });
-        markKnown();
-        const session = { session: r.session, expires: r.expires, agent: r.agent };
-        saveAgentSession(session); onSignedIn(session);
-      } catch (error) { setState({ busy: false, message: error.message }); if (['CODE_EXPIRED', 'CODE_LOCKED'].includes(error.code)) { setCode(''); setStep('email'); } }
+        const r = await agentCall('verify', { email: email.trim(), code: code.replace(/\s/g, ''), remember });
+        const session = keep(r);
+        if (r.passwordSet === false || choose) { setPending(session); go('create'); } else onSignedIn(session);
+      } catch (error) { problem(error.message); if (['CODE_EXPIRED', 'CODE_LOCKED'].includes(error.code)) { setCode(''); setStep('email'); } }
+    };
+    const create = async event => {
+      event.preventDefault();
+      const weak = passwordProblem(newPassword, email);
+      if (weak) return problem(weak);
+      setState({ busy: true, message: '' });
+      try { await agentCall('password', { session: pending.session, email: email.trim(), passwordKey: await passwordKey(newPassword, email) }); onSignedIn(pending); }
+      catch (error) { problem(error.message); }
+    };
+    const emailField = input('dh-agent-signin-email', 'Email address', email, setEmail, { type: 'email', name: 'username', autoComplete: 'username', required: true });
+    const captcha = h('div', { ref: check, key: step, className: 'dh-captcha', 'aria-label': 'Security check' });
+    const keepBox = h('label', { className: 'dh-agent-remember' },
+      h('input', { type: 'checkbox', checked: remember, onChange: e => setRemember(e.target.checked) }),
+      h('span', null, 'Keep me signed in on this device for 30 days', h('small', null, 'Leave this unticked on a shared computer.')));
+    const error = state.message && h('p', { role: 'alert', className: 'dh-agent-error' }, state.message);
+    const link = (label, onClick) => h('button', { type: 'button', className: 'dh-agent-link', onClick }, label);
+    const submit = (busy, label) => h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? busy : label);
+    const notice = h('p', { className: 'dh-agent-notice' }, 'No account yet? ', link('Apply first', onApply), '. DwellHunt usually approves within 1 working day.');
+    const form = {
+      password: () => h('form', { key: 'password', onSubmit: login, noValidate: true, className: 'dh-agent-form' },
+        emailField,
+        h(PasswordField, { id: 'dh-agent-password', label: 'Password', value: password, onChange: setPassword, autoComplete: 'current-password' }),
+        h('div', { className: 'dh-agent-row' }, link('Forgot password?', () => { setChoose(true); go('email'); })),
+        keepBox, captcha, error, submit('Signing in…', 'Sign in'),
+        h('button', { type: 'button', className: secondary, onClick: () => { setChoose(false); go('email'); } }, 'Email me a code instead'),
+        h('p', { className: 'dh-agent-hint' }, 'First time here? Use an email code, then create your password.'), notice),
+      email: () => h('form', { key: 'email', onSubmit: askCode, noValidate: true, className: 'dh-agent-form' },
+        h('p', { className: 'dh-agent-lead' }, choose ? 'We’ll email you a 6-digit code. After you enter it, you can create a new password.' : 'We’ll email you a 6-digit code.'),
+        emailField, keepBox, captcha, error, submit('Sending…', 'Email me a code'),
+        link('Sign in with a password', () => { setChoose(false); go('password'); }), notice),
+      code: () => h('form', { key: 'code', onSubmit: verify, noValidate: true, className: 'dh-agent-form' },
+        h('p', { className: 'dh-agent-lead' }, `If ${email.trim()} belongs to an approved agent, a 6-digit code arrives within a minute. Check your spam folder too. The code expires in 10 minutes.`),
+        h('p', { className: 'dh-agent-notice' }, 'No email? Codes are only sent to approved agents, so you may need to ', link('apply first', onApply), ', or your application may still be waiting for approval.'),
+        input('dh-agent-code', '6-digit code', code, setCode, { inputMode: 'numeric', autoComplete: 'one-time-code', maxLength: 7, required: true }),
+        error, submit('Checking…', 'Continue'),
+        link('Use a different email or send a new code', () => { setCode(''); go('email'); })),
+      create: () => h('form', { key: 'create', onSubmit: create, noValidate: true, className: 'dh-agent-form' },
+        h('p', { className: 'dh-agent-lead' }, 'You’re signed in. Next time you can use this password instead of an email code.'),
+        h('input', { type: 'email', name: 'username', value: email.trim(), readOnly: true, autoComplete: 'username', className: 'dh-agent-hidden-user', tabIndex: -1, 'aria-hidden': 'true' }),
+        h(PasswordField, { id: 'dh-agent-new-password', label: 'New password', value: newPassword, onChange: setNewPassword, autoComplete: 'new-password',
+          hint: 'At least 10 characters. Your browser may offer to save it. Saving signs out your other devices.' }),
+        error, submit('Saving…', 'Save password'),
+        h('button', { type: 'button', className: secondary, disabled: state.busy, onClick: () => onSignedIn(pending) }, 'Skip for now')),
     };
     return shell(
       h('button', { type: 'button', className: 'dh-agent-back', onClick: onBack }, '← Back'),
       h('section', { className: 'dh-agent-card' },
         h('p', { className: 'dh-agent-eyebrow' }, 'Agent portal'),
-        tabs('signin', onApply, () => {}),
-        h('h1', null, step === 'email' ? 'Sign in as an agent' : 'Check your email'),
-        step === 'email'
-          ? h('form', { onSubmit: askCode, noValidate: true, className: 'dh-agent-form' },
-              h('p', { className: 'dh-agent-lead' }, 'Enter the email you applied with. We’ll send you a 6-digit code — there’s no password to remember.'),
-              h('p', { className: 'dh-agent-notice' }, h('strong', null, 'Codes are only sent to approved agents. '), 'No account yet? ',
-                h('button', { type: 'button', className: 'dh-agent-link', onClick: onApply }, 'Apply first'), ' — it takes a minute, and DwellHunt usually approves within 1 working day.'),
-              input('dh-agent-signin-email', 'Email address', email, setEmail, { type: 'email', autoComplete: 'email', required: true }),
-              h('div', { ref: check, className: 'dh-captcha', 'aria-label': 'Security check' }),
-              state.message && h('p', { role: 'alert', className: 'dh-agent-error' }, state.message),
-              h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Sending…' : 'Email me a code'))
-          : h('form', { onSubmit: verify, noValidate: true, className: 'dh-agent-form' },
-              h('p', { className: 'dh-agent-lead' }, `If ${email.trim()} belongs to an approved agent, a 6-digit code arrives within a minute. Check your spam folder too. The code expires in 10 minutes.`),
-              h('p', { className: 'dh-agent-notice' }, 'No email? Codes are only sent to approved agents, so you may need to ',
-                h('button', { type: 'button', className: 'dh-agent-link', onClick: onApply }, 'apply first'), ', or your application may still be waiting for approval.'),
-              input('dh-agent-code', '6-digit code', code, setCode, { inputMode: 'numeric', autoComplete: 'one-time-code', maxLength: 7, required: true }),
-              state.message && h('p', { role: 'alert', className: 'dh-agent-error' }, state.message),
-              h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Checking…' : 'Sign in'),
-              h('button', { type: 'button', className: 'dh-agent-link', onClick: () => { setStep('email'); setCode(''); setState({ busy: false, message: '' }); } }, 'Use a different email or send a new code')),
-        null));
+        step !== 'create' && tabs('signin', onApply, () => {}),
+        h('h1', null, { password: 'Sign in as an agent', email: choose ? 'Create a new password' : 'Sign in with an email code', code: 'Check your email', create: 'Create your password' }[step]),
+        form[step]()));
   }
 
   function Apply({ onSignIn, onBack }) {
@@ -338,18 +407,20 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
       state.message && h('p', { className: 'dh-agent-meta', role: 'status' }, state.message));
   }
 
-  function Dashboard({ session, onCreate, onSignedOut }) {
-    const [data, setData] = React.useState({ loading: true, listings: [], posts: [], profile: null, telegram: null, message: '' });
+  function Dashboard({ session, onCreate, onSignedOut, onChangePassword }) {
+    const [data, setData] = React.useState({ loading: true, listings: [], posts: [], profile: null, telegram: null, passwordSet: false, message: '' });
     const [tick, setTick] = React.useState(0);
     const refresh = () => setTick(t => t + 1);
     React.useEffect(() => {
       let live = true;
       agentCall('me', { session: session.session })
-        .then(r => { if (live) setData({ loading: false, listings: r.listings || [], posts: r.posts || [], profile: r.profile || { bio: '', areas: [], logo: '' }, telegram: r.telegram || null, message: '' }); })
+        .then(r => { if (live) setData({ loading: false, listings: r.listings || [], posts: r.posts || [], profile: r.profile || { bio: '', areas: [], logo: '' }, telegram: r.telegram || null, passwordSet: r.passwordSet === true, message: '' }); })
         .catch(error => { if (!live) return; if (error.code === 'SIGNED_OUT') { clearAgentSession(); onSignedOut(); } else setData(o => ({ ...o, loading: false, message: error.message })); });
       return () => { live = false; };
     }, [session.session, tick]);
     const signOut = () => { agentCall('signout', { session: session.session }).catch(() => {}); clearAgentSession(); onSignedOut(); };
+    // Setting a password always needs a fresh emailed code, so this starts the code sign-in.
+    const changePassword = () => { agentCall('signout', { session: session.session }).catch(() => {}); clearAgentSession(); onChangePassword(); };
     const a = session.agent || {};
     return shell(
       h('section', { className: 'dh-agent-card' },
@@ -358,6 +429,7 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
             h('h1', null, a.name || 'Your dashboard'), h('p', { className: 'dh-agent-lead' }, `${a.agency || ''}${a.id ? ' · ' + a.id : ''}`)),
           h('div', { className: 'dh-agent-dash-actions' },
             h('button', { type: 'button', className: primary, onClick: onCreate }, '+ New listing'),
+            !data.loading && h('button', { type: 'button', className: secondary, onClick: changePassword }, data.passwordSet ? 'Change password' : 'Create password'),
             h('button', { type: 'button', className: secondary, onClick: signOut }, 'Sign out'))),
         !data.loading && h(TelegramConnect, { session, telegram: data.telegram }),
         h('h2', { className: 'dh-agent-h2' }, 'Your listings'),
@@ -383,8 +455,9 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
     const [view, setView] = React.useState(() => loadAgentSession() ? 'dashboard'
       : /^#agents=signin/.test(location.hash) || isKnown() ? 'signin' : 'apply');
     const [draft, setDraft] = React.useState(null);
+    const [start, setStart] = React.useState('password');
     React.useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [view, !!draft]);
-    const signedOut = () => { setSession(null); setDraft(null); setView('signin'); };
+    const signedOut = (next = 'password') => { setStart(next); setSession(null); setDraft(null); setView('signin'); };
     if (session && draft) return h(OwnerListing, { draft, onDraftChange: setDraft, agent: session, onStart: () => { setDraft(null); setView('dashboard'); } });
     if (session && view === 'create') return h(OwnerStart, { agent: session.agent, onAgencyPortal: () => setView('dashboard'),
       onContinue: (purpose, category) => {
@@ -393,9 +466,9 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
         setDraft({ ...createOwnerDraft({ listingRole: 'owner', listingPurpose: purpose, propertyCategory: category }),
           ownerName: a.name || '', email: a.email || '', ...phoneParts(a.phone), preferredContact: 'whatsapp', step: 1 });
       } });
-    if (session && view === 'dashboard') return h(Dashboard, { session, onCreate: () => setView('create'), onSignedOut: signedOut });
+    if (session && view === 'dashboard') return h(Dashboard, { session, onCreate: () => setView('create'), onSignedOut: () => signedOut(), onChangePassword: () => signedOut('email') });
     if (view === 'apply') return h(Apply, { onSignIn: () => setView('signin'), onBack });
-    return h(SignIn, { onBack, onApply: () => setView('apply'), onSignedIn: s => { setSession(s); setView('dashboard'); } });
+    return h(SignIn, { start, onBack, onApply: () => setView('apply'), onSignedIn: s => { setSession(s); setView('dashboard'); } });
   }
 
   function Chooser({ onAgent, onOwner }) {

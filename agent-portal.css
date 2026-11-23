@@ -103,3 +103,14 @@
 .dh-agent-check { padding: 14px 16px; border: 1px solid #d6e0ec; border-radius: 12px; background: #fff; cursor: pointer; }
 .dh-agent-check:has(input:checked) { border-color: #0b2a4a; background: #f8fafc; }
 .dh-agent-check-note { display: block; margin-top: 2px; color: #4a5b70; }
+
+/* Password sign-in (24 Nov 2026). */
+.dh-agent-password { position: relative; }
+.dh-agent-password input { padding-right: 72px !important; }
+.dh-agent-password button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); padding: 8px 10px; border: 0; background: none; color: #165bb8; font-size: 13px; font-weight: 700; cursor: pointer; }
+.dh-agent-hint { margin: 0; font-size: 13px; line-height: 1.5; color: #4a5b70; }
+.dh-agent-row { display: flex; justify-content: flex-end; margin-top: -6px; }
+.dh-agent-remember { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: #14191f; cursor: pointer; }
+.dh-agent-remember input { width: 16px; height: 16px; margin-top: 3px; accent-color: #0b2a4a; flex: none; }
+.dh-agent-remember small { display: block; color: #4a5b70; font-size: 12px; }
+.dh-agent-hidden-user { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
