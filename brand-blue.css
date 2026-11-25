@@ -44,3 +44,15 @@ body, #root > .min-h-screen { background-color: var(--dh-champagne) !important; 
 .dh-check { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 6px; font-family: "Plus Jakarta Sans", Arial, sans-serif;
   font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; vertical-align: middle; cursor: help; }
 .dh-check.is-checked { background: #eff5fd; color: #11458c; border: 1px solid #bcd5f5; }
+
+/* "My profile" in the top bar for a signed-in agent (26 Nov 2026). */
+.dh-my-profile { display: inline-flex; align-items: center; gap: 8px; padding: 3px 12px 3px 3px; border: 1px solid #d6e0ec; border-radius: 999px;
+  background: #fff; color: #0b2a4a; font-family: "Plus Jakarta Sans", Arial, sans-serif; font-size: 13px; font-weight: 700; text-decoration: none;
+  white-space: nowrap; flex: none; }
+.dh-my-profile:hover { border-color: #0b2a4a; }
+.dh-my-profile:focus-visible { outline: 2px solid #1d6fd8; outline-offset: 2px; }
+.dh-my-profile-photo { width: 32px; height: 32px; border-radius: 50%; overflow: hidden; display: inline-flex; align-items: center; justify-content: center;
+  background: #dce9fa; color: #0b2a4a; font-size: 12px; font-weight: 800; box-shadow: 0 0 0 2px #c9a24d; }
+.dh-my-profile-photo img { width: 100%; height: 100%; object-fit: cover; }
+.dh-home-header .dh-my-profile { margin-left: auto; margin-right: 10px; }
+@media (max-width: 640px) { .dh-my-profile { padding: 3px; } .dh-my-profile-label { display: none; } }

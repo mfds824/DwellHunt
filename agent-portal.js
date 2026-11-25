@@ -23,10 +23,12 @@ export function clearAgentSession(storage) {
   for (const get of storage ? [() => storage] : [() => globalThis.localStorage, () => globalThis.sessionStorage]) {
     try { get().removeItem(SESSION_KEY); } catch { /* ignore */ }
   }
+  try { window.dispatchEvent(new Event('dh-agent-session')); } catch { /* not in a browser */ }
 }
 export function saveAgentSession(value, remember = true) {
   clearAgentSession();
   try { (remember ? globalThis.localStorage : globalThis.sessionStorage).setItem(SESSION_KEY, JSON.stringify(value)); } catch { /* private mode */ }
+  try { window.dispatchEvent(new Event('dh-agent-session')); } catch { /* not in a browser */ }
 }
 
 /** Friendly text for backend codes. */
