@@ -1,7 +1,7 @@
 /* Public agent profiles and posts (homepage "Verified agents" strip + "#agent=AG-…" profile page).
  * Data comes from the Worker's read-only /agents/public routes; agent email and phone are never public.
  * Buyers enquire from each listing (through DwellHunt); the profile itself has no contact form. */
-import { verifiedBadge } from './verified-badge.js?v=20261126-sp3';
+import { verifiedBadge, checkMark } from './verified-badge.js?v=20261126-sp3';
 const isAgentId = id => /^AG-\d{4}-\d{4}$/.test(String(id || ''));
 export function agentFromHash(hash) {
   const m = /^#agent=(AG-\d{4}-\d{4})$/.exec(decodeURIComponent(String(hash || '')));
@@ -31,7 +31,16 @@ export function loadAgent(id, fetchImpl = fetch) {
     .then(r => r.ok ? r.json() : null).then(b => b && b.ok && b.agent ? b.agent : null).catch(() => null);
 }
 const POST_TOPIC_LABELS = { listed: 'Just listed', price: 'Price reduced', viewing: 'Viewing slots open', closed: 'Rented / sold', tip: 'Market tip' };
-const price = l => Number(l.price) > 0 ? `${l.currency || 'LKR'} ${Number(l.price).toLocaleString('en-US')}${l.purpose === 'buy' ? '' : ' / month'}` : 'Price on request';
+const PERIOD = { night: ' / night', quarter: ' / quarter', year: ' / year' };
+const price = l => Number(l.price) > 0 ? `${l.currency || 'LKR'} ${Number(l.price).toLocaleString('en-US')}${l.purpose === 'buy' ? '' : PERIOD[l.billingPeriod] || ' / month'}` : 'Price on request';
+const TYPE_LABELS = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial', land: 'Land' };
+/** Filter and sort a profile's listings: purpose (all / rent / buy), type, and order (newest, price up, price down). */
+export function profileListings(list, { purpose = 'all', type = 'all', sort = 'newest' } = {}) {
+  const rows = (list || []).filter(l => (purpose === 'all' || l.purpose === purpose) && (type === 'all' || l.category === type));
+  const value = l => Number(l.price) || 0;
+  return rows.sort(sort === 'price-up' ? (a, b) => value(a) - value(b) : sort === 'price-down' ? (a, b) => value(b) - value(a)
+    : (a, b) => String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')));
+}
 const plural = (n, word) => `${n} ${word}${Number(n) === 1 ? '' : 's'}`;
 export function listingFacts(l) {
   return [Number(l.bedrooms) > 0 ? plural(l.bedrooms, 'bed') : '', Number(l.bathrooms) > 0 ? plural(l.bathrooms, 'bath') : '',
@@ -93,12 +102,44 @@ export function createAgentProfiles(React) {
     const photo = safeImage(l.photos && l.photos[0] && l.photos[0].url);
     const facts = listingFacts(l), place = listingPlace(l);
     return h('button', { type: 'button', className: 'dh-ap-card', onClick: () => onOpen(l.reference) },
-      photo ? h('img', { src: photo, alt: '', loading: 'lazy' }) : h('span', { className: 'dh-ap-card-nophoto', 'aria-hidden': 'true' }),
+      h('span', { className: 'dh-ap-card-photo' },
+        photo ? h('img', { src: photo, alt: '', loading: 'lazy' }) : h('span', { className: 'dh-ap-card-nophoto', 'aria-hidden': 'true' }),
+        h('span', { className: 'dh-ap-card-purpose' }, l.purpose === 'buy' ? 'For sale' : 'For rent')),
       h('span', { className: 'dh-ap-card-body' },
-        h('strong', null, l.title),
         h('span', { className: 'dh-ap-card-price' }, price(l)),
-        facts && h('span', null, facts),
-        place && h('span', { className: 'dh-ap-card-place' }, place)));
+        h('span', { className: 'dh-ap-card-facts' }, [TYPE_LABELS[l.category], facts].filter(Boolean).join(' · ')),
+        h('strong', null, l.title),
+        place && h('span', { className: 'dh-ap-card-place' }, place),
+        checkMark(h, l)));
+  }
+
+  /** Active properties with All / Rent / Sale, a type filter and a sort order. */
+  function ProfileListings({ listings, onOpen }) {
+    const [f, setF] = React.useState({ purpose: 'all', type: 'all', sort: 'newest' });
+    const shown = profileListings(listings, f);
+    const count = purpose => listings.filter(l => purpose === 'all' || l.purpose === purpose).length;
+    const types = [...new Set(listings.map(l => l.category).filter(c => TYPE_LABELS[c]))];
+    const set = (key, value) => setF(o => ({ ...o, [key]: value }));
+    if (!listings.length) return h('p', { className: 'dh-ap-muted' }, 'No live listings right now.');
+    return h(React.Fragment, null,
+      h('div', { className: 'dh-ap-filters' },
+        h('div', { className: 'dh-ap-tabs', role: 'group', 'aria-label': 'Rent or sale' },
+          [['all', 'All'], ['rent', 'Rent'], ['buy', 'Sale']].map(([value, label]) => h('button', { key: value, type: 'button',
+            className: f.purpose === value ? 'is-on' : '', 'aria-pressed': f.purpose === value, onClick: () => set('purpose', value) }, `${label} (${count(value)})`))),
+        types.length > 1 && h('select', { 'aria-label': 'Property type', value: f.type, onChange: e => set('type', e.target.value) },
+          h('option', { value: 'all' }, 'Any type'), types.map(t => h('option', { key: t, value: t }, TYPE_LABELS[t]))),
+        h('select', { 'aria-label': 'Sort', value: f.sort, onChange: e => set('sort', e.target.value) },
+          h('option', { value: 'newest' }, 'Newest first'), h('option', { value: 'price-up' }, 'Price: low to high'), h('option', { value: 'price-down' }, 'Price: high to low'))),
+      h('p', { className: 'dh-ap-showing', role: 'status' }, shown.length ? `Showing ${shown.length} of ${listings.length} ${listings.length === 1 ? 'property' : 'properties'}` : 'No properties match these filters.'),
+      shown.length > 0 && h('div', { className: 'dh-ap-cards' }, shown.map(l => h(ListingCard, { key: l.reference, listing: l, onOpen }))));
+  }
+
+  /** A long introduction is cut short with "Read more", as on Bayut. */
+  function AboutText({ text }) {
+    const [open, setOpen] = React.useState(false);
+    const long = text.length > 260;
+    return h('p', { className: 'dh-ap-bio' }, long && !open ? text.slice(0, 240).replace(/\s+\S*$/, '') + '… ' : text + ' ',
+      long && h('button', { type: 'button', className: 'dh-ap-link', onClick: () => setOpen(v => !v) }, open ? 'Read less' : 'Read more'));
   }
 
   /** A post: its topic, then the listing's own details (never typed into the post), the agent's message and a link to the listing. */
@@ -140,7 +181,7 @@ export function createAgentProfiles(React) {
     // Opened from a listing: closing goes back to that listing instead of dropping the visitor on the homepage.
     const close = () => { if (from) { setFrom(''); openListing(from); return; } history.replaceState(null, '', location.pathname + location.search); setId(''); };
     const listings = agent ? agent.listings || [] : [], areas = agent ? (agent.areas || []).filter(Boolean) : [];
-    const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const rent = listings.filter(l => l.purpose !== 'buy').length, sale = listings.length - rent;
     // A full page over the site: cover band, the agent's details, then About, listings and posts.
     return h('div', { className: 'dh-ap-full', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dh-ap-name' },
       h('div', { className: 'dh-ap-topbar' },
@@ -155,20 +196,19 @@ export function createAgentProfiles(React) {
           h('div', { className: 'dh-ap-hero-text' },
             h('h2', { id: 'dh-ap-name' }, agent.name || agent.agency),
             agent.name && agent.agency && h('p', { className: 'dh-ap-agency' }, agent.agency),
-            h('p', { className: 'dh-ap-stats' }, [count(listings.length, 'active listing'), areas.length ? count(areas.length, 'area') : '',
-              (agent.languages || []).length ? count(agent.languages.length, 'language') : ''].filter(Boolean).join(' · ')),
+            h('p', { className: 'dh-ap-stats' }, h('b', null, listings.length), ` active ${listings.length === 1 ? 'property' : 'properties'}`,
+              [rent ? ` · ${rent} for rent` : '', sale ? ` · ${sale} for sale` : ''].join('')),
             h('div', { className: 'dh-ap-badges' }, profileBadges(h, agent)))),
         h('div', { className: 'dh-ap-layout' },
           h('main', { className: 'dh-ap-main' },
             h('section', { className: 'dh-ap-box' }, h('h3', null, `About ${agent.name || agent.agency}`),
-              agent.bio ? h('p', { className: 'dh-ap-bio' }, agent.bio) : h('p', { className: 'dh-ap-muted' }, 'This agent has not added an introduction yet.'),
+              agent.bio ? h(AboutText, { text: agent.bio }) : h('p', { className: 'dh-ap-muted' }, 'This agent has not added an introduction yet.'),
+              languageLine(agent.languages) && h('p', { className: 'dh-ap-speaks' }, languageLine(agent.languages)),
               h('dl', { className: 'dh-ap-facts' },
-                [['Agency', agent.agency], ['Specialises in', areas.join(', ')], ['Languages', (agent.languages || []).join(', ')],
+                [['Agency', agent.agency], ['Specialises in', areas.join(', ')],
                  ['Video viewings', agent.videoViewings ? 'Available on a live video call' : ''], ['Verification', 'DwellHunt Verified agent']]
                   .filter(([, v]) => v).flatMap(([k, v]) => [h('dt', { key: k + 't' }, k), h('dd', { key: k + 'd' }, v)]))),
-            h('section', { className: 'dh-ap-box' }, h('h3', null, `Live listings (${listings.length})`),
-              listings.length ? h('div', { className: 'dh-ap-cards' }, listings.map(l => h(ListingCard, { key: l.reference, listing: l, onOpen: openListing })))
-                : h('p', { className: 'dh-ap-muted' }, 'No live listings right now.')),
+            h('section', { className: 'dh-ap-box' }, h('h3', null, 'Active properties'), h(ProfileListings, { listings, onOpen: openListing })),
             agent.posts && agent.posts.length > 0 && h('section', { className: 'dh-ap-box' }, h('h3', null, 'Posts'),
               h('div', { className: 'dh-ap-posts' }, agent.posts.map(p => h(PostCard, { key: p.id, post: p, agency: agent.agency, onOpen: openListing }))))))));
   }

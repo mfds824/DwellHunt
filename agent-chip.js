@@ -1,7 +1,7 @@
 // "My profile" in the top bar: a signed-in agent's profile photo, linking straight to their public profile.
 // Shown only while an agent is signed in on this device; nothing private is shown (the photo is already public).
 import { loadAgentSession } from './agent-portal.js?v=20261126-mp1';
-import { loadAgent, initials } from './agent-profiles.js?v=20261126-fp2';
+import { loadAgent, initials } from './agent-profiles.js?v=20261126-by1';
 
 const safePhoto = url => typeof url === 'string' && /^https:\/\/res\.cloudinary\.com\//.test(url) ? url : '';
 
