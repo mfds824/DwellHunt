@@ -144,3 +144,8 @@
   .dh-lp-mobilebar strong { font-size: 17px; }
 }
 .dh-lp-report [role="alert"] { color: #b91c1c; font-weight: 700; }
+
+/* In person / Video call switch above the booking form on owner sale listings (26 Nov 2026). */
+.dh-lp-kinds { display: inline-flex; border: 1px solid #d6e0ec; border-radius: 999px; overflow: hidden; background: #fff; margin-bottom: 10px; }
+.dh-lp-kinds button { border: 0; background: none; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 700; color: #0b2a4a; cursor: pointer; }
+.dh-lp-kinds button.is-on { background: #0b2a4a; color: #fff; }

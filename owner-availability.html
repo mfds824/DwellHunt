@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="referrer" content="no-referrer" />
-    <title>Video Viewing Times — DwellHunt</title>
+    <title>Viewing Times — DwellHunt</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <!-- Telegram Mini App support: lets the page close itself and return to the Owners bot chat after saving. -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -51,6 +51,12 @@
       .save:disabled { opacity: .55; cursor: default; }
       .hidden { display: none !important; }
       .center { text-align: center; color: var(--muted); padding: 40px 0; }
+      .modes { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin-top: 14px; background: var(--card); }
+      .mode { border: 0; background: none; padding: 10px 16px; font-weight: 700; color: var(--brand); }
+      .mode[aria-pressed="true"] { background: var(--brand); color: #fff; }
+      .mode small { font-weight: 400; opacity: .85; }
+      .grid.visits { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      @media (min-width: 620px) { .grid.visits { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
     </style>
   </head>
   <body>
@@ -60,14 +66,18 @@
       <section id="problem" class="card hidden"><h1>This link does not work</h1><p id="problem-text" class="note"></p></section>
       <div id="app" class="hidden">
         <section class="card">
-          <h1>Video viewing times</h1>
+          <h1>Viewing times</h1>
           <p class="listing" id="title"></p>
           <p class="week" id="week"></p>
-          <p class="note">Tap the times when you can show your home on a video call. Each time is a 30-minute call. All times are Sri Lanka time. Buyers can only ask for these times, and you approve every request before anything is booked.</p>
+          <div class="modes" role="group" aria-label="Kind of viewing">
+            <button class="mode" id="mode-visit" type="button" aria-pressed="true">In person <small>1 hour</small></button>
+            <button class="mode hidden" id="mode-video" type="button" aria-pressed="false">Video call <small>30 min</small></button>
+          </div>
+          <p class="note" id="mode-note"></p>
           <div class="quick">
             <button class="pill" id="same" type="button">🔁 Same as last week</button>
             <button class="pill" id="pause" type="button">⏸ Pause this week</button>
-            <button class="pill" id="clear" type="button">Clear all</button>
+            <button class="pill" id="clear" type="button">Clear this tab</button>
           </div>
           <div id="state" class="banner hidden" role="status"></div>
           <a id="back" class="pill hidden" href="https://t.me/PropertyOwnerBot" style="display:inline-block;margin-top:12px;text-decoration:none">← Back to Telegram</a>
@@ -84,6 +94,10 @@
           dev: 'https://dwellhunt-viewing-api-dev.countdracula-11537.workers.dev/api/dwellhunt/owner-availability' };
         var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         var TIMES = []; for (var m = 8 * 60; m < 20 * 60; m += 30) TIMES.push(('0' + Math.floor(m / 60)).slice(-2) + ('0' + m % 60).slice(-2));
+        // In-person visits are 1 hour, starting on the hour from 08:00 to 19:00.
+        var VISIT_TIMES = []; for (var hr = 8; hr < 20; hr++) VISIT_TIMES.push(('0' + hr).slice(-2) + '00');
+        var NOTES = { visit: 'Tap the hours when buyers can visit your home in person. Each visit is 1 hour. All times are Sri Lanka time. Buyers can only ask for these times, and you approve every request before anything is booked. You send the address only after you accept.',
+          video: 'Tap the times when you can show your home on a video call. Each call is 30 minutes. All times are Sri Lanka time. Buyers can only ask for these times, and you approve every request before anything is booked.' };
         var PARTS = [['Morning', '0800', '1200'], ['Afternoon', '1200', '1600'], ['Evening', '1600', '2000']];
         var $ = function (id) { return document.getElementById(id); };
         // The bot puts r, w and k in the query; older links had them in the # part. Telegram's own launch data is ignored.
@@ -98,7 +112,9 @@
           setTimeout(function () { try { window.close(); } catch (e) {} $('back').classList.remove('hidden'); }, 1200);
         }
         var url = q.api === 'dev' ? API.dev : API.live;
-        var picked = {}, data = null, dirty = false, busy = false;
+        // picked.visit and picked.video hold the chosen "d-HHMM" times of each kind; mode is the tab on show.
+        var picked = { visit: {}, video: {} }, mode = 'visit', data = null, dirty = false, busy = false;
+        function times() { return mode === 'visit' ? VISIT_TIMES : TIMES; }
 
         function dayDate(week, d) { return new Date(Date.parse(week + 'T00:00:00Z') + d * 86400000); }
         function dayText(dt) { return DAYS[(dt.getUTCDay() + 6) % 7] + ' ' + dt.getUTCDate() + ' ' + MONTHS[dt.getUTCMonth()]; }
@@ -110,8 +126,8 @@
         function problem(text) { $('loading').classList.add('hidden'); $('app').classList.add('hidden'); $('footer').classList.add('hidden');
           $('problem').classList.remove('hidden'); $('problem-text').textContent = text; }
         var MESSAGES = { LINK_INVALID: 'This link is not valid any more. Send /times to the DwellHunt Owners bot on Telegram for a fresh link.',
-          LISTING_NOT_AVAILABLE: 'This listing is not live, or it does not offer video viewings. Message DwellHunt on Telegram if this is wrong.',
-          NOT_OPEN: 'Video viewing times are not open yet. We will let you know on Telegram.', WEEK_PASSED: 'This week has passed. Send /times on Telegram for the current week.',
+          LISTING_NOT_AVAILABLE: 'This listing is not live. Message DwellHunt on Telegram if this is wrong.',
+          NOT_OPEN: 'Viewing times are not open yet. We will let you know on Telegram.', WEEK_PASSED: 'This week has passed. Send /times on Telegram for the current week.',
           NO_LAST_WEEK: 'No times were saved last week, so there is nothing to copy.', INVALID_REQUEST: 'This link is incomplete. Please open it again from Telegram.' };
         function say(kind, text) { var b = $('state'); b.className = 'banner ' + kind; b.textContent = text; }
 
@@ -121,18 +137,23 @@
             .then(function (r) { return r.json().catch(function () { return { ok: false, code: 'SERVICE_UNAVAILABLE' }; }); })
             .catch(function () { return { ok: false, code: 'NETWORK' }; });
         }
-        function total() { return Object.keys(picked).length; }
+        function total() { return Object.keys(picked.visit).length + Object.keys(picked.video).length; }
         function refresh() {
-          var n = total(), past = data ? slTodayIndex(data.week) : 0;
-          $('total').textContent = n ? n + ' time' + (n === 1 ? '' : 's') + ' chosen' : 'No times chosen';
+          var n = total(), past = data ? slTodayIndex(data.week) : 0, v = Object.keys(picked.visit).length, c = Object.keys(picked.video).length;
+          var say = function (k, word) { return k + ' ' + word + (k === 1 ? '' : 's'); };
+          $('total').textContent = !n ? 'No times chosen' : data.video ? say(v, 'visit') + ' · ' + say(c, 'video time') : say(v, 'visit') + ' chosen';
           $('save').disabled = busy || !dirty || !data.editable;
           $('same').disabled = busy || !data.editable || !data.lastWeek;
           $('same').textContent = data.lastWeek ? '🔁 Same as last week (' + data.lastWeek + ')' : '🔁 Same as last week';
           $('pause').disabled = busy || !data.editable || data.paused && !dirty;
-          $('clear').disabled = busy || !data.editable || !n;
-          document.querySelectorAll('.slot').forEach(function (b) { b.setAttribute('aria-pressed', picked[b.dataset.s] ? 'true' : 'false'); });
-          for (var d = 0; d < 7; d++) { var c = Object.keys(picked).filter(function (s) { return s[0] === String(d); }).length;
-            $('count-' + d).textContent = c ? '· ' + c : ''; }
+          $('clear').disabled = busy || !data.editable || !Object.keys(picked[mode]).length;
+          document.querySelectorAll('.slot').forEach(function (b) { b.setAttribute('aria-pressed', picked[mode][b.dataset.s] ? 'true' : 'false'); });
+          for (var d = 0; d < 7; d++) { var k = Object.keys(picked[mode]).filter(function (s) { return s[0] === String(d); }).length;
+            $('count-' + d).textContent = k ? '· ' + k : ''; }
+          $('mode-visit').setAttribute('aria-pressed', mode === 'visit' ? 'true' : 'false');
+          $('mode-video').setAttribute('aria-pressed', mode === 'video' ? 'true' : 'false');
+          $('mode-video').classList.toggle('hidden', !data.video);
+          $('mode-note').textContent = NOTES[mode];
           if (dirty) say('warn', 'You have changes that are not saved yet.');
         }
         function change(fn) { fn(); dirty = true; refresh(); }
@@ -148,29 +169,31 @@
             if (!locked) PARTS.forEach(function (p) {
               var b = document.createElement('button'); b.type = 'button'; b.className = 'part'; b.textContent = p[0];
               b.addEventListener('click', function () { change(function () {
-                var keys = TIMES.filter(function (t) { return t >= p[1] && t < p[2]; }).map(function (t) { return d + '-' + t; });
-                var all = keys.every(function (k) { return picked[k]; }); keys.forEach(function (k) { if (all) delete picked[k]; else picked[k] = true; }); }); });
+                var keys = times().filter(function (t) { return t >= p[1] && t < p[2]; }).map(function (t) { return d + '-' + t; });
+                var on = picked[mode], all = keys.every(function (k) { return on[k]; }); keys.forEach(function (k) { if (all) delete on[k]; else on[k] = true; }); }); });
               parts.appendChild(b);
             });
             if (d < past) { var gone = document.createElement('span'); gone.className = 'part'; gone.textContent = 'Day passed'; parts.appendChild(gone); }
             head.appendChild(h2); head.appendChild(parts); card.appendChild(head);
-            var grid = document.createElement('div'); grid.className = 'grid';
-            TIMES.forEach(function (t) {
+            var grid = document.createElement('div'); grid.className = 'grid' + (mode === 'visit' ? ' visits' : '');
+            times().forEach(function (t) {
               var b = document.createElement('button'); b.type = 'button'; b.className = 'slot'; b.dataset.s = d + '-' + t; b.textContent = hm(t); b.disabled = locked;
               b.setAttribute('aria-label', dayText(dayDate(data.week, d)) + ' ' + hm(t));
-              b.addEventListener('click', function () { change(function () { if (picked[b.dataset.s]) delete picked[b.dataset.s]; else picked[b.dataset.s] = true; }); });
+              b.addEventListener('click', function () { change(function () { var on = picked[mode]; if (on[b.dataset.s]) delete on[b.dataset.s]; else on[b.dataset.s] = true; }); });
               grid.appendChild(b);
             });
             card.appendChild(grid); box.appendChild(card);
           })(d);
         }
         function show(r) {
-          data = r; picked = {}; (r.slots || []).forEach(function (s) { picked[s] = true; }); dirty = false;
+          data = r; picked = { visit: {}, video: {} }; dirty = false;
+          (r.visitSlots || []).forEach(function (s) { picked.visit[s] = true; }); (r.slots || []).forEach(function (s) { picked.video[s] = true; });
+          if (!r.video) mode = 'visit';
           $('title').textContent = r.title; $('week').textContent = dayText(dayDate(r.week, 0)) + ' to ' + dayText(dayDate(r.week, 6));
           $('loading').classList.add('hidden'); $('app').classList.remove('hidden'); $('footer').classList.remove('hidden');
           build(); refresh();
           if (!r.editable) say('warn', 'This week has passed, so these times can no longer be changed.');
-          else if (r.paused) say('warn', '⏸ Video viewings are paused this week. Choose times and save to open them again.');
+          else if (r.paused) say('warn', '⏸ Viewings are paused this week. Choose times and save to open them again.');
           else if (r.status === 'saved') say('ok', '✅ Saved. Buyers can ask for these times.');
           else $('state').classList.add('hidden');
         }
@@ -182,11 +205,14 @@
             show(r); say(r.paused ? 'warn' : 'ok', done(r) + (tg ? ' Returning to Telegram…' : '')); finish();
           });
         }
-        $('save').addEventListener('click', function () { act('save', { slots: Object.keys(picked).sort() }, function (r) {
-          return r.slots.length ? '✅ Saved ' + r.slots.length + ' time' + (r.slots.length === 1 ? '' : 's') + '. Buyers can ask for these times.' : 'Saved with no times. Buyers cannot book this week.'; }); });
-        $('same').addEventListener('click', function () { act('same', null, function (r) { return '✅ Copied last week: ' + r.slots.length + ' times saved.'; }); });
+        $('save').addEventListener('click', function () { act('save', { slots: Object.keys(picked.video).sort(), visitSlots: Object.keys(picked.visit).sort() }, function (r) {
+          var n = (r.slots || []).length + (r.visitSlots || []).length;
+          return n ? '✅ Saved ' + n + ' time' + (n === 1 ? '' : 's') + '. Buyers can ask for these times.' : 'Saved with no times. Buyers cannot book this week.'; }); });
+        $('same').addEventListener('click', function () { act('same', null, function (r) { return '✅ Copied last week: ' + ((r.slots || []).length + (r.visitSlots || []).length) + ' times saved.'; }); });
+        $('mode-visit').addEventListener('click', function () { mode = 'visit'; build(); refresh(); });
+        $('mode-video').addEventListener('click', function () { mode = 'video'; build(); refresh(); });
         $('pause').addEventListener('click', function () { act('pause', null, function () { return '⏸ Paused. Buyers will not see any times this week.'; }); });
-        $('clear').addEventListener('click', function () { change(function () { picked = {}; }); });
+        $('clear').addEventListener('click', function () { change(function () { picked[mode] = {}; }); });
         window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 
         if (!/^OL-\d{4}-\d{4}$/.test(q.r || '') || !/^\d{4}-\d{2}-\d{2}$/.test(q.w || '') || !/^[a-f0-9]{64}$/.test(q.k || '')) { problem(MESSAGES.INVALID_REQUEST); return; }

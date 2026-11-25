@@ -1,7 +1,7 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
 import { verifiedBadge, checkMark } from './verified-badge.js?v=20261126-sp3';
-import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261126-q1";
+import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261126-ip1";
 import { createCountryCodePicker } from "./country-code-picker.js?v=20261123-cc1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
@@ -75,38 +75,43 @@ export function whatsappNumber(code, number) {
   const local = String(number || '').replace(/\D/g, '').replace(/^0+/, '');
   return local ? String(code || '').replace(/[^\d+]/g, '') + local : '';
 }
-export function videoRequestPayload(l, f, zone) {
+/** kind: 'video' (a 30-minute video call) or 'visit' (a 1-hour in-person visit). */
+export function videoRequestPayload(l, f, zone, kind = 'video') {
   const sale = l.purpose === 'buy', answers = { timeline: f.timeline, budget: f.budget };
   answers[sale ? 'payment' : 'occupants'] = sale ? f.payment : f.occupants;
   return { reference: l.reference, slot: f.slot, name: f.name.trim(), email: f.email.trim(), whatsapp: whatsappNumber(f.code, f.whatsapp), timezone: zone,
-    answers, message: f.message.trim(), rules: f.rules === true, consent: f.consent === true, website: f.website || '' };
+    answers, message: f.message.trim(), rules: f.rules === true, consent: f.consent === true, website: f.website || '', kind: kind === 'visit' ? 'visit' : 'video' };
 }
 const slotCache = {};
-/** { phase: 'loading' | 'ready', slots } for a listing; an empty list when video booking is not open. */
+/** { phase: 'loading' | 'ready', slots, visitSlots } for a listing: the owner's free video call and in-person visit times.
+ * Empty lists when booking is not open. */
 export function useOwnerSlots(React, reference) {
-  const [state, setState] = React.useState(() => slotCache[reference] ? { phase: 'ready', slots: slotCache[reference] } : { phase: reference ? 'loading' : 'ready', slots: [] });
+  const none = { slots: [], visitSlots: [] };
+  const [state, setState] = React.useState(() => slotCache[reference] ? { phase: 'ready', ...slotCache[reference] } : { phase: reference ? 'loading' : 'ready', ...none });
   React.useEffect(() => {
     const url = (window.DWELLHUNT_VIEWING || {}).ownerSlotsUrl;
     if (!reference || slotCache[reference]) return undefined;
-    if (!url) { setState({ phase: 'ready', slots: [] }); return undefined; }
+    if (!url) { setState({ phase: 'ready', ...none }); return undefined; }
     let live = true;
+    const future = list => Array.isArray(list) ? list.filter(s => typeof s === 'string' && Date.parse(s) > Date.now()) : [];
     fetch(url + '?ref=' + encodeURIComponent(reference), { headers: { Accept: 'application/json' } })
-      .then(r => r.ok ? r.json() : { slots: [] }).catch(() => ({ slots: [] }))
-      .then(body => { const slots = Array.isArray(body.slots) ? body.slots.filter(s => typeof s === 'string' && Date.parse(s) > Date.now()) : [];
-        slotCache[reference] = slots; if (live) setState({ phase: 'ready', slots }); });
+      .then(r => r.ok ? r.json() : none).catch(() => none)
+      .then(body => { const times = { slots: future(body.slots), visitSlots: future(body.visitSlots) };
+        slotCache[reference] = times; if (live) setState({ phase: 'ready', ...times }); });
     return () => { live = false; };
   }, [reference]);
   return state;
 }
-const VR_ERRORS = { SLOT_TAKEN: 'Sorry, that time was just taken. Please pick another time.', ALREADY_REQUESTED: 'You have already asked for a video viewing of this home. Check your email for the details.',
-  TOO_MANY_REQUESTS: 'You have several open video viewing requests. Please wait for an answer before asking for more.', NOT_OPEN: 'Video viewings are not open for this home right now. Please send an enquiry instead.',
-  LISTING_NOT_AVAILABLE: 'Video viewings are not open for this home right now. Please send an enquiry instead.', HUMAN_VERIFICATION_REQUIRED: 'The security check did not complete. Please try again.' };
+const VR_ERRORS = { SLOT_TAKEN: 'Sorry, that time was just taken. Please pick another time.', ALREADY_REQUESTED: 'You have already asked for this kind of viewing of this home. Check your email for the details.',
+  TOO_MANY_REQUESTS: 'You have several open viewing requests. Please wait for an answer before asking for more.', NOT_OPEN: 'Viewings are not open for this home right now. Please send an enquiry instead.',
+  LISTING_NOT_AVAILABLE: 'Viewings are not open for this home right now. Please send an enquiry instead.', HUMAN_VERIFICATION_REQUIRED: 'The security check did not complete. Please try again.' };
 
 export function createVideoBooking(React) {
   const h = React.createElement;
   const CountryCodePicker = createCountryCodePicker(React);
-  return function VideoBooking({ listing: l, slots, onBack }) {
-    const sale = l.purpose === 'buy', zone = buyerTimeZone(), colombo = zone === 'Asia/Colombo';
+  /** kind 'video' books a 30-minute video call; kind 'visit' a 1-hour in-person visit. */
+  return function VideoBooking({ listing: l, slots, onBack, kind = 'video' }) {
+    const sale = l.purpose === 'buy', zone = buyerTimeZone(), colombo = zone === 'Asia/Colombo', visit = kind === 'visit';
     const days = React.useMemo(() => groupSlots(slots, zone), [slots, zone]);
     const [day, setDay] = React.useState(0);
     const [f, setF] = React.useState({ slot: '', name: '', email: '', country: 'LK', code: '+94', whatsapp: '', timeline: '', payment: '', occupants: '', budget: '', message: '', rules: false, consent: false });
@@ -125,19 +130,21 @@ export function createVideoBooking(React) {
       if (!url) { setState({ phase: 'error', message: VR_ERRORS.NOT_OPEN }); return; }
       setState({ phase: 'sending', message: '' });
       try {
-        const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(videoRequestPayload(l, { ...f, website: honeypot.current ? honeypot.current.value : '' }, zone)) });
+        const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(videoRequestPayload(l, { ...f, website: honeypot.current ? honeypot.current.value : '' }, zone, kind)) });
         const body = await response.json().catch(() => ({}));
         if (!response.ok || body.ok !== true) { if (body.code === 'SLOT_TAKEN') delete slotCache[l.reference]; throw new Error(body.code || 'send'); }
         setState({ phase: 'done', message: '' });
       } catch (error) { setState({ phase: 'error', message: VR_ERRORS[error.message] || 'Your request could not be sent. Please try again, or send an enquiry instead.' }); }
     };
     if (state.phase === 'done') return h('div', { className: 'dh-ol-enquiry dh-ol-enquiry-done', role: 'status' },
-      h('strong', null, 'Video viewing requested'),
-      h('p', null, `You asked for ${when(f.slot)}. The owner will answer within 12 hours, and we will email you the video call link if they accept. We've emailed you a confirmation.`));
+      h('strong', null, visit ? 'Visit requested' : 'Video viewing requested'),
+      h('p', null, visit ? `You asked to visit on ${when(f.slot)}. The owner will answer within 12 hours. If they accept, we will email you the address and directions. We've emailed you a confirmation.`
+        : `You asked for ${when(f.slot)}. The owner will answer within 12 hours, and we will email you the video call link if they accept. We've emailed you a confirmation.`));
     const current = days[Math.min(day, days.length - 1)];
     return h('form', { className: 'dh-ol-enquiry dh-vb', onSubmit: submit, noValidate: true, 'aria-labelledby': 'dh-vb-title' },
-      h('h3', { id: 'dh-vb-title' }, 'Book a video viewing'),
-      h('p', { className: 'dh-ol-enquiry-note' }, 'The owner shows you the home on a 30-minute video call. Pick a time, answer three short questions, and the owner confirms within 12 hours.'),
+      h('h3', { id: 'dh-vb-title' }, visit ? 'Book an in-person visit' : 'Book a video viewing'),
+      h('p', { className: 'dh-ol-enquiry-note' }, visit ? 'The owner shows you the home in person. Each visit is 1 hour. Pick a time, answer three short questions, and the owner confirms within 12 hours. We email you the address once they accept.'
+        : 'The owner shows you the home on a 30-minute video call. Pick a time, answer three short questions, and the owner confirms within 12 hours.'),
       h('p', { className: 'dh-vb-zone' }, colombo ? 'Times are Sri Lanka time.' : `Times are shown in your time zone (${zone}).`),
       h('div', { className: 'dh-vb-days', role: 'tablist', 'aria-label': 'Day' }, days.map((d, n) => h('button', { key: d.day, type: 'button', role: 'tab',
         'aria-selected': n === day ? 'true' : 'false', className: 'dh-vb-day', onClick: () => setDay(n) }, d.day))),
@@ -158,7 +165,8 @@ export function createVideoBooking(React) {
         options.map(([value, label]) => h('label', { key: value }, h('input', { type: 'radio', name: 'dh-vb-' + key, value, checked: f[key] === value, onChange: set(key) }), h('span', null, label))))),
       h('label', null, 'Anything the owner should know? (optional)', h('textarea', { rows: 2, value: f.message, onChange: set('message'), maxLength: 600 })),
       h('label', { className: 'dh-ol-enquiry-consent' }, h('input', { type: 'checkbox', checked: f.rules, onChange: set('rules') }),
-        h('span', null, 'I will not record the call. I understand DwellHunt never asks for an advance or deposit before I (or someone I trust) visit in person and a lawyer checks the deed.')),
+        h('span', null, visit ? 'I understand DwellHunt never asks for an advance, deposit or holding fee at a visit or before a lawyer checks the deed, and I will not pay anything at the visit.'
+          : 'I will not record the call. I understand DwellHunt never asks for an advance or deposit before I (or someone I trust) visit in person and a lawyer checks the deed.')),
       h('label', { className: 'dh-ol-enquiry-consent' }, h('input', { type: 'checkbox', checked: f.consent, onChange: set('consent') }),
         h('span', null, 'I agree that DwellHunt may use these details to arrange the viewing. The owner sees my first name and answers, not my phone or email.')),
       h('div', { className: 'dh-hp', 'aria-hidden': 'true' }, h('label', null, 'Leave empty', h('input', { ref: honeypot, type: 'text', tabIndex: -1, autoComplete: 'off', defaultValue: '' }))),
@@ -194,13 +202,18 @@ export function createOwnerFeed(React) {
       message: owner ? `Hello, I'm interested in renting "${l.title}". Is it still available?` : `Hello, I'm interested in "${l.title}". Please send me more details.` });
     const [state, setState] = React.useState({ phase: 'idle', message: '' });
     const honeypot = React.useRef(null);
-    // With free times from the owner, "Video call" opens the booking form; "None of these times work?" comes back here.
-    const times = useOwnerSlots(React, video ? l.reference : '');
+    // With free times from the owner, "In person" and "Video call" open the booking form for that kind;
+    // "None of these times work?" comes back here, where the buyer can still ask for a date.
+    const times = useOwnerSlots(React, owner ? l.reference : '');
     const [pickTimes, setPickTimes] = React.useState(true);
-    const set = key => event => setF(old => ({ ...old, [key]: key === 'consent' ? event.target.checked : event.target.value }));
+    const set = key => event => { if (key === 'viewing') setPickTimes(true); setF(old => ({ ...old, [key]: key === 'consent' ? event.target.checked : event.target.value })); };
     if (video && f.viewing === 'video' && pickTimes && times.slots.length) return h('div', null,
-      h('button', { type: 'button', className: 'dh-text-button dh-vb-back', onClick: () => setF(old => ({ ...old, viewing: 'in-person' })) }, '← View in person or ask a question instead'),
+      h('button', { type: 'button', className: 'dh-text-button dh-vb-back', onClick: () => setF(old => ({ ...old, viewing: 'in-person' })) },
+        times.visitSlots.length ? '← Visit in person instead' : '← View in person or ask a question instead'),
       h(VideoBooking, { listing: l, slots: times.slots, onBack: () => setPickTimes(false) }));
+    if (owner && f.viewing === 'in-person' && pickTimes && times.visitSlots.length) return h('div', null,
+      video && times.slots.length > 0 && h('button', { type: 'button', className: 'dh-text-button dh-vb-back', onClick: () => setF(old => ({ ...old, viewing: 'video' })) }, 'Prefer a video call? Book one instead →'),
+      h(VideoBooking, { key: 'visit', listing: l, slots: times.visitSlots, kind: 'visit', onBack: () => setPickTimes(false) }));
     const submit = async event => {
       event.preventDefault();
       if (honeypot.current && honeypot.current.value) { setState({ phase: 'done', message: '' }); return; }

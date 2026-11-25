@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="referrer" content="no-referrer" />
-    <title>Your Video Viewing — DwellHunt</title>
+    <title>Your Viewing — DwellHunt</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <style>
       :root { --ink: #0f1e33; --muted: #4b535d; --brand: #0b2a4a; --accent: #1d6fd8; --line: #dbe0e5; --bg: #f6efe0; --card: #ffffff; --chip: #eef1f5; --warn: #9a3412; --warn-bg: #fff4ec; }
@@ -41,18 +41,21 @@
       .fb .missed { color: var(--muted); font-size: 14px; }
       .thanks { margin-top: 16px; background: var(--chip); border-radius: 12px; padding: 12px 14px; color: var(--brand); }
       .hidden { display: none !important; }
+      .address { background: #eff5fd; border: 1px solid #bcd5f5; border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
+      .address p { margin: 4px 0 0; white-space: pre-line; }
       .center { text-align: center; color: var(--muted); padding: 40px 0; }
     </style>
   </head>
   <body>
     <header><div class="bar"><a class="brand" href="./">Dwell<span>Hunt</span></a></div></header>
     <main>
-      <p id="loading" class="center">Loading your video viewing…</p>
+      <p id="loading" class="center">Loading your viewing…</p>
       <section id="card" class="card hidden">
         <h1 id="heading">Your video viewing</h1>
         <p class="listing" id="title"></p>
         <div class="when"><strong id="when"></strong><span id="colombo"></span></div>
         <div id="banner" class="banner hidden" role="status"></div>
+        <div class="address hidden" id="address-box"><strong>Address and directions from the owner</strong><p id="address"></p></div>
         <p class="status" id="status"></p>
         <div class="actions" id="actions">
           <a class="btn primary hidden" id="join" target="_blank" rel="noopener noreferrer">Join the video call</a>
@@ -66,15 +69,15 @@
         <form class="fb hidden" id="fb">
           <h2>How did it go?</h2>
           <label><input type="checkbox" value="shown" /> <span>The owner showed me everything I asked to see</span></label>
-          <label><input type="checkbox" value="clear" /> <span>The video and sound were clear</span></label>
+          <label><input type="checkbox" value="clear" /> <span id="fb-clear">The video and sound were clear</span></label>
           <label><input type="checkbox" value="interested" /> <span>I am still interested in this home</span></label>
-          <label><input type="checkbox" value="visit" /> <span>I would like to visit in person or talk about next steps</span></label>
+          <label><input type="checkbox" value="visit" /> <span id="fb-visit">I would like to visit in person or talk about next steps</span></label>
           <textarea id="comment" rows="2" maxlength="500" placeholder="Anything else? (optional)"></textarea>
-          <label class="missed"><input type="checkbox" id="missed" /> <span>The video call did not happen</span></label>
+          <label class="missed"><input type="checkbox" id="missed" /> <span id="fb-missed">The video call did not happen</span></label>
           <button class="btn primary" id="send" type="submit">Send feedback</button>
         </form>
         <p class="thanks hidden" id="thanks">Thank you for your feedback. DwellHunt will be in touch if you want to take this home further.</p>
-        <p class="note">Please do not record the call. DwellHunt never asks for an advance or deposit before you, or someone you trust, have visited in person and a lawyer has checked the deed.</p>
+        <p class="note" id="note">Please do not record the call. DwellHunt never asks for an advance or deposit before you, or someone you trust, have visited in person and a lawyer has checked the deed.</p>
       </section>
     </main>
     <script>
@@ -95,15 +98,25 @@
           approved: 'Confirmed. Join with the button below at the time above; you will not need to be let in.',
           declined: 'This time did not work out. We emailed you other times the owner is free.', expired: 'The owner could not confirm in time. We emailed you other times.',
           cancelled: 'This video viewing is cancelled.', completed: 'This video viewing has taken place.', 'no-show': 'This video viewing has taken place.' };
+        // An in-person visit (kind "visit") uses the same page with its own words, and shows the owner's address once sent.
+        var VISIT = { requested: 'Waiting for the owner to accept. You will get an email either way within 12 hours.',
+          approved: 'Confirmed. The owner sends the address and directions through DwellHunt; they appear here and in your email.',
+          cancelled: 'This visit is cancelled.', completed: 'This visit has taken place.', 'no-show': 'This visit has taken place.' };
         function listingUrl() { return './#owner-listing=' + encodeURIComponent(data.reference); }
         function problem(text) { $('loading').textContent = text; }
         function show(r) {
           data = r; $('loading').classList.add('hidden'); $('card').classList.remove('hidden');
           $('title').textContent = r.title;
+          var visit = r.kind === 'visit', what = visit ? 'visit' : 'video viewing', length = visit ? '1-hour in-person visit' : '30-minute video call';
           if (r.slot) { $('when').textContent = fmt(r.slot, zone, DAY) + ', ' + fmt(r.slot, zone, TIME) + (zone === 'Asia/Colombo' ? ' (Sri Lanka time)' : ' your time');
-            $('colombo').textContent = zone === 'Asia/Colombo' ? '30-minute video call' : fmt(r.slot, 'Asia/Colombo', TIME) + ' in Sri Lanka · 30-minute video call'; }
-          $('status').textContent = r.canFeedback ? 'Your viewing time has passed. Please tell us how it went.' : STATUS[r.status] || '';
-          $('heading').textContent = r.canFeedback || r.feedbackDone ? 'How was your video viewing?' : r.status === 'approved' ? 'Your video viewing is confirmed' : r.status === 'requested' ? 'Your video viewing request' : 'Your video viewing';
+            $('colombo').textContent = zone === 'Asia/Colombo' ? length : fmt(r.slot, 'Asia/Colombo', TIME) + ' in Sri Lanka · ' + length; }
+          $('status').textContent = r.canFeedback ? 'Your viewing time has passed. Please tell us how it went.'
+            : visit && r.status === 'approved' && r.address ? 'Confirmed. The address and directions from the owner are above.' : (visit && VISIT[r.status]) || STATUS[r.status] || '';
+          $('heading').textContent = r.canFeedback || r.feedbackDone ? 'How was your ' + what + '?' : r.status === 'approved' ? 'Your ' + what + ' is confirmed' : r.status === 'requested' ? 'Your ' + what + ' request' : 'Your ' + what;
+          $('address-box').classList.toggle('hidden', !(visit && r.address)); $('address').textContent = r.address || '';
+          if (visit) { $('fb-clear').textContent = 'The address and directions were easy to follow'; $('fb-visit').textContent = 'I would like to talk about next steps';
+            $('fb-missed').textContent = 'The visit did not happen';
+            $('note').textContent = 'Bring someone with you if you can. Never pay an advance, deposit or holding fee at the visit, and not before a lawyer has checked the deed. DwellHunt never asks for one.'; }
           $('join').classList.toggle('hidden', !r.meet); if (r.meet) $('join').href = r.meet;
           $('cancel').classList.toggle('hidden', !r.canCancel);
           $('other').classList.toggle('hidden', !r.reference);
@@ -127,7 +140,7 @@
             show(r); if (after) after();
           });
         }
-        $('cancel').addEventListener('click', function () { ask('Cancel this video viewing? The owner will be told, and the time will open for other buyers.', function () { cancel(); }); });
+        $('cancel').addEventListener('click', function () { ask('Cancel this ' + (data && data.kind === 'visit' ? 'visit' : 'video viewing') + '? The owner will be told, and the time will open for other buyers.', function () { cancel(); }); });
         $('other').addEventListener('click', function () {
           if (!data.canCancel) { location.href = listingUrl(); return; }
           ask('To choose another time, we cancel this one first, then show you the owner\'s free times.', function () { cancel(function () { location.href = listingUrl(); }); });

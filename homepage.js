@@ -1,5 +1,5 @@
 import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings, locationSuggestions, locationQuery, budgetKind, priceForMonthly, monthlyForPrice, comparisonPriceLKR } from "./homepage-search.js?v=20261126-q1";
-import { createOwnerFeed } from "./owner-listings-feed.js?v=20261126-hd1";
+import { createOwnerFeed } from "./owner-listings-feed.js?v=20261126-ip1";
 import { createAgentProfiles } from "./agent-profiles.js?v=20261126-by1";
 import { AgentChip } from "./agent-chip.js?v=20261126-by1";
 // Homepage presentation only. Marketplace state, routes and integrations remain in app.js.
