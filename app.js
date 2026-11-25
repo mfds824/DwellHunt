@@ -1,4 +1,4 @@
-import { createOwnerListing, createOwnerStart } from "./owner-listing.js?v=20261126-q1";
+import { createOwnerListing, createOwnerStart } from "./owner-listing.js?v=20261126-pw2";
 import { createOwnerDraft } from "./owner-listing-model.js?v=20261126-q1";
 import { createListPropertyPage } from "./agent-portal.js?v=20261126-sp3";
 import { createHomepage } from "./homepage.js?v=20261126-q1";

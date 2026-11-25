@@ -3,9 +3,9 @@ import { OWNER_STEPS, CATEGORY_LABELS, APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_T
   validatePhotoCount, safeUploadUrl, titleProblem } from './owner-listing-model.js?v=20261126-q1';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 import { createCountryCodePicker } from './country-code-picker.js?v=20261123-cc1';
-import { createPriceInput } from './price-input.js?v=20261123-pw1';
+import { createPriceInput } from './price-input.js?v=20261126-pw2';
 import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261126-q1';
-import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261126-q1';
+import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261126-pw2';
 
 const primary = 'px-6 py-3 rounded-xl bg-emerald-900 hover:bg-emerald-800 text-white font-bold text-xs disabled:opacity-40';
 const secondary = 'px-5 py-2.5 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50';
@@ -272,7 +272,8 @@ export function createOwnerListing(React) {
         rules.annex && sale && field('landArea', d.saleScope === 'annex-only' ? 'Land share with the annex' : 'Total land area', { type: 'number', min: 0.01, step: 'any' }),
         rules.annex && sale && field('landUnit', 'Unit', { options: [['perches', 'Perches'], ['acres', 'Acres'], ['sqft', 'Square feet'], ['sqm', 'Square metres']] }),
         rules.apartment && field('floorNumber', 'Floor number', { type: 'number', min: -10, step: 1, hint: '0 = ground floor.' }),
-        rules.apartment && field('maintenance', `Maintenance charge (${d.currency} per month)`, { type: 'number', min: 0, step: 'any', optional: true })),
+        rules.apartment && h(PriceInput, { id: 'dh-owner-maintenance', name: 'maintenance', required: false, value: String(d.maintenance ?? ''),
+          onChange: value => change('maintenance', value), currency: d.currency, label: 'Maintenance charge per month', error: errors.maintenance, className: control })),
         rules.apartment && h(React.Fragment, null, check('balcony', 'Balcony'), field('view', 'View', { optional: true, options: VIEWS, hint: 'The main view from the windows or balcony.' }),
           checks('sharedFacilities', 'Building facilities (optional)', SHARED)),
         rules.outdoor && h(React.Fragment, null, check('garden', 'Garden'), check('pool', 'Private pool')),

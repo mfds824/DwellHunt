@@ -1,5 +1,5 @@
 import { APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, SALE_SCOPES, VIEWS, rulesFor, publicOwnerListing, publicText } from './owner-listing-model.js?v=20261126-q1';
-import { formatPriceInput } from './price-input.js?v=20261123-pw1';
+import { formatPriceInput } from './price-input.js?v=20261126-pw2';
 
 // Builds a fact-based description draft on the owner's device. No AI service is used and nothing is sent.
 export const DESCRIPTION_AI_AVAILABLE = false;

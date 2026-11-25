@@ -36,8 +36,8 @@ function divided(raw, places) {
   const trimmed = decimals.replace(/0+$/, '');
   return formatPriceInput(integer.replace(/^0+(?=\d)/, '') + (trimmed ? '.' + trimmed : ''));
 }
-// The amount in words, as Sri Lankans say prices: lakhs below ten million ("One lakh fifty thousand rupees"), then
-// millions ("Twenty-five million five lakh rupees"). Other currencies use ordinary English words. Cents are left out.
+// The amount in words, as Sri Lankans say prices: lakhs below one million ("One lakh fifty thousand rupees"), then
+// millions with any lakhs left over ("One million rupees", "Twenty-five million five lakh rupees"). Other currencies use ordinary English words. Cents are left out.
 const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen',
   'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
 const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
@@ -52,7 +52,7 @@ function english(n) { // up to 999,999,999,999
   if (n) out.push(upTo999(n));
   return out.join(' ');
 }
-function lakhs(n) { // below ten million
+function lakhs(n) { // below one million
   const lakh = Math.floor(n / 100000), thousand = Math.floor((n % 100000) / 1000), rest = n % 1000;
   return [lakh ? upTo999(lakh) + ' lakh' : '', thousand ? upTo999(thousand) + ' thousand' : '', rest ? upTo999(rest) : ''].filter(Boolean).join(' ');
 }
@@ -60,7 +60,7 @@ const CURRENCY_WORDS = { LKR: 'rupees', USD: 'US dollars', GBP: 'pounds', AED: '
 export function priceInWords(raw, currency = 'LKR') {
   const n = Math.floor(Number(String(raw ?? '').replace(/[,\s]/g, '')));
   if (!Number.isFinite(n) || n <= 0 || n >= 1e12) return '';
-  const text = currency !== 'LKR' ? english(n) : n < 1e7 ? lakhs(n) : english(Math.floor(n / 1e6)) + ' million' + (n % 1e6 ? ' ' + lakhs(n % 1e6) : '');
+  const text = currency !== 'LKR' ? english(n) : n < 1e6 ? lakhs(n) : english(Math.floor(n / 1e6)) + ' million' + (n % 1e6 ? ' ' + lakhs(n % 1e6) : '');
   return text.charAt(0).toUpperCase() + text.slice(1) + ' ' + (CURRENCY_WORDS[currency] || currency);
 }
 export function priceSummary(raw, currency) {
