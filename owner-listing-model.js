@@ -78,7 +78,7 @@ export function unusualFigures(d) {
       if (price < 2_000) warnings.push('The nightly rate is below LKR 2,000.');
       if (price > 300_000) warnings.push('The nightly rate is above LKR 300,000.');
     } else {
-      const monthly = d.billingPeriod === 'year' ? price / 12 : price;
+      const monthly = d.billingPeriod === 'year' ? price / 12 : d.billingPeriod === 'quarter' ? price / 3 : price;
       if (monthly < 10_000) warnings.push('The rent is below LKR 10,000 a month.');
       if (monthly > 3_000_000) warnings.push('The rent is above LKR 3,000,000 a month.');
     }

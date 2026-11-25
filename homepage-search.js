@@ -69,7 +69,7 @@ export function comparisonPriceLKR(p) {
   const price = foreign ? Number(p.priceLKR) : Number(p.price);
   if (!Number.isFinite(price) || price < 0 || p.price === '' || p.price == null) return null;
   if (p.purpose !== 'rent') return price;
-  const factor = { month: 1, monthly: 1, year: 1 / 12, yearly: 1 / 12, week: 52 / 12, weekly: 52 / 12, night: 365 / 12, nightly: 365 / 12, day: 365 / 12, daily: 365 / 12 }[rentalPeriod(p)];
+  const factor = { month: 1, monthly: 1, year: 1 / 12, yearly: 1 / 12, quarter: 1 / 3, quarterly: 1 / 3, week: 52 / 12, weekly: 52 / 12, night: 365 / 12, nightly: 365 / 12, day: 365 / 12, daily: 365 / 12 }[rentalPeriod(p)];
   return factor ? price * factor : null;
 }
 // Colombo postal zones, offered as search suggestions even before listings exist there.

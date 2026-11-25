@@ -1,5 +1,5 @@
-import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings, locationSuggestions, locationQuery, budgetKind, priceForMonthly, monthlyForPrice, comparisonPriceLKR } from "./homepage-search.js?v=20261118-mp1";
-import { createOwnerFeed } from "./owner-listings-feed.js?v=20261126-vw1";
+import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings, locationSuggestions, locationQuery, budgetKind, priceForMonthly, monthlyForPrice, comparisonPriceLKR } from "./homepage-search.js?v=20261126-q1";
+import { createOwnerFeed } from "./owner-listings-feed.js?v=20261126-q1";
 import { createAgentProfiles } from "./agent-profiles.js?v=20261126-sp1";
 // Homepage presentation only. Marketplace state, routes and integrations remain in app.js.
 export function createHomepage(
@@ -187,7 +187,7 @@ export function createHomepage(
             "p",
             { className: "dh-price" },
             p.purpose === "rent" && !["month", "monthly"].includes(rentalPeriod(p))
-              ? `${formatPrice(p.price, store.currency, "buy")} / ${{ weekly: "week", yearly: "year", nightly: "night", daily: "day" }[rentalPeriod(p)] || rentalPeriod(p)}`
+              ? `${formatPrice(p.price, store.currency, "buy")} / ${{ weekly: "week", yearly: "year", quarterly: "quarter", nightly: "night", daily: "day" }[rentalPeriod(p)] || rentalPeriod(p)}`
               : formatPrice(p.price, store.currency, p.purpose),
           ),
           p.isNegotiable &&

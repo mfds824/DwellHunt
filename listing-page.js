@@ -37,8 +37,11 @@ export function monthlyPayment(principal, ratePct, years) {
 }
 /** What a tenant pays before moving in: the advance (months of rent) plus the security deposit. */
 export function moveInCost(l) {
-  const rent = Number(l.price) || 0, months = Number(l.advanceMonths) || 0, deposit = Number(l.securityDeposit) || 0;
-  return { advance: rent * months, months, deposit, total: rent * months + deposit };
+  // Advance is counted in months, so quarterly and yearly rent is turned into a monthly amount first.
+  const perMonth = { year: 12, quarter: 3 }[l.billingPeriod] || 1;
+  const rent = (Number(l.price) || 0) / perMonth, months = Number(l.advanceMonths) || 0, deposit = Number(l.securityDeposit) || 0;
+  const advance = Math.round(rent * months);
+  return { advance, months, deposit, total: advance + deposit };
 }
 export function pricePerArea(l) {
   return l.purpose === 'buy' && Number(l.price) > 0 && Number(l.floorArea) > 0 ? Math.round(Number(l.price) / Number(l.floorArea)) : 0;

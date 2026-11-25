@@ -1,7 +1,7 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
 import { verifiedBadge, checkMark } from './verified-badge.js?v=20261126-sp3';
-import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261126-vw1";
+import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261126-q1";
 import { createCountryCodePicker } from "./country-code-picker.js?v=20261123-cc1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
@@ -9,7 +9,7 @@ const safeImage = url => typeof url === 'string' && /^https:\/\/res\.cloudinary\
 const number = value => Number(value).toLocaleString('en-US');
 
 export function ownerPriceText(l) {
-  const period = l.purpose === 'buy' ? '' : l.billingPeriod === 'night' ? ' / night' : l.billingPeriod === 'year' ? ' / year' : ' / month';
+  const period = l.purpose === 'buy' ? '' : l.billingPeriod === 'night' ? ' / night' : l.billingPeriod === 'year' ? ' / year' : l.billingPeriod === 'quarter' ? ' / quarter' : ' / month';
   return Number(l.price) > 0 ? `${l.currency || 'LKR'} ${number(l.price)}${period}` : 'Price on request';
 }
 export function ownerFacts(l) {
