@@ -2,7 +2,7 @@
  * sign-in and the agent dashboard. Agents send listings through the owner form (owner-listing.js) with their session,
  * so every listing joins the same DwellHunt review. The backend is the Worker's /api/dwellhunt/agents/* routes. */
 import { passwordKey, passwordProblem } from './password-strength.js?v=20261124-pw1';
-import { verifiedBadge } from './verified-badge.js?v=20261126-sp1';
+import { verifiedBadge } from './verified-badge.js?v=20261126-sp3';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 
 const SESSION_KEY = 'dwellhunt_agent_session';
@@ -396,19 +396,19 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
       h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Publishing…' : 'Publish post'));
   }
 
-  /** A live listing's DwellHunt check: checked, requested, or a button to ask for it. */
+  /** A live listing's verification: verified, requested, or a button to ask for it. */
   function CheckState({ session, listing: l, onChanged }) {
     const [state, setState] = React.useState({ busy: false, message: '' });
-    if (l.check === 'checked') return h('small', { className: 'dh-agent-check-ok' }, '✓ DwellHunt checked');
-    if (l.check === 'requested') return h('small', null, 'Check requested');
+    if (l.check === 'checked') return h('small', { className: 'dh-agent-check-ok' }, '✓ Verified property');
+    if (l.check === 'requested') return h('small', null, 'Verification requested');
     if (l.check !== 'not checked') return null;
     const ask = async () => {
       setState({ busy: true, message: '' });
       try { await agentCall('listings/check', { session: session.session, reference: l.reference }); onChanged(); }
       catch (error) { setState({ busy: false, message: error.message }); }
     };
-    return h(React.Fragment, null, h('small', null, 'Not checked by DwellHunt'),
-      h('button', { type: 'button', className: 'dh-agent-link', disabled: state.busy, onClick: ask }, state.busy ? 'Sending…' : 'Request a DwellHunt check'),
+    return h(React.Fragment, null,
+      h('button', { type: 'button', className: 'dh-agent-link', disabled: state.busy, onClick: ask }, state.busy ? 'Sending…' : 'Request verification'),
       state.message && h('small', { role: 'alert', className: 'dh-agent-error-text' }, state.message));
   }
 
@@ -473,7 +473,7 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
         data.loading ? h('p', { className: 'dh-agent-lead', role: 'status' }, 'Loading your listings…')
           : data.message ? h('p', { role: 'alert', className: 'dh-agent-error' }, data.message)
           : !data.listings.length ? h('div', { className: 'dh-agent-empty' }, h('p', null, 'You haven’t sent any listings yet.'),
-              h('p', null, 'Publish straight away, or send a listing to DwellHunt to check first. Listings stay live for 1 month, and buyer enquiries are emailed to you.'))
+              h('p', null, 'Publish straight away, or send a listing to DwellHunt to verify first. Listings stay live for 1 month, and buyer enquiries are emailed to you.'))
           : h('ul', { className: 'dh-agent-list' }, data.listings.map(l => h('li', { key: l.reference },
               h('div', null, h('p', { className: 'dh-agent-title' }, l.title || l.reference),
                 h('p', { className: 'dh-agent-meta' }, [l.reference, l.city, l.price ? `${l.currency} ${Number(l.price).toLocaleString('en-US')}${l.pricePeriod ? ' / ' + l.pricePeriod : ''}` : ''].filter(Boolean).join(' · '))),

@@ -89,7 +89,7 @@ export function createOwnerListing(React) {
     const [titleSuggestions, setTitleSuggestions] = React.useState(null);
     const [descriptionDraft, setDescriptionDraft] = React.useState(null);
     const [send, setSend] = React.useState({ phase: 'idle', message: '', reference: '' });
-    // Verified agents choose: publish straight away (shown as not checked) or send it to DwellHunt to check first.
+    // Verified agents choose: publish straight away (a plain listing) or send it to DwellHunt to check first.
     const [publishNow, setPublishNow] = React.useState(true);
     const [token, setToken] = React.useState('');
     const files = React.useRef(new Map());
@@ -316,7 +316,7 @@ export function createOwnerListing(React) {
           h('ul', null, Object.values(section.errors).map(error => h('li', { key: error }, error))), button('Fix this', () => go(section.step)))),
         publicCard(),
         agent ? h('fieldset', { className: 'dh-listing-group dh-publish-choice' }, h('legend', { className: 'font-bold text-stone-900 mb-2' }, 'How do you want to publish it?'),
-          [[true, 'Publish now', 'It goes live straight away for 1 month with your DwellHunt Verified badge, marked “Not checked by DwellHunt”. You can ask for a check later.'],
+          [[true, 'Publish now', 'It goes live straight away for 1 month with your DwellHunt Verified badge. You can ask DwellHunt to check it later.'],
            [false, 'Send to DwellHunt to check first', 'Our team reviews it, usually within 1 working day. It then goes live with the “DwellHunt checked” mark.']]
             .map(([value, title, text]) => h('label', { key: title, className: 'dh-publish-option', 'data-selected': publishNow === value },
               h('input', { type: 'radio', name: 'dh-publish', checked: publishNow === value, onChange: () => setPublishNow(value), disabled: busy }),
@@ -385,7 +385,7 @@ export function createOwnerListing(React) {
         h('p', null, 'Your reference number is'), h('p', { className: 'text-2xl font-black text-emerald-900 tracking-wider' }, send.reference),
         h('div', { className: 'dh-owner-note text-left space-y-1' }, h('strong', null, 'What happens next'),
           send.live ? h('ol', { className: 'list-decimal pl-5 space-y-1' }, h('li', null, `It’s live on DwellHunt for 1 month. We’ve emailed the details to ${d.email}.`),
-            h('li', null, 'It shows your DwellHunt Verified badge and is marked “Not checked by DwellHunt”.'),
+            h('li', null, 'It shows your DwellHunt Verified badge.'),
             h('li', null, 'For the “DwellHunt checked” mark, press “Request a DwellHunt check” next to it on your dashboard.'))
           : h('ol', { className: 'list-decimal pl-5 space-y-1' }, h('li', null, `We’ve emailed the details to ${d.email}.`),
             agent ? h('li', null, 'DwellHunt will review it, usually within 1 working day, and may contact you to confirm you are authorised to advertise it.')

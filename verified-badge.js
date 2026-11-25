@@ -6,8 +6,8 @@ export const VERIFIED_MEANING = 'DwellHunt Verified: DwellHunt reviewed and appr
  * Feeds from before the flag existed had only checked listings. */
 export const isChecked = l => !!l && l.checked !== false;
 export function checkMark(h, l, key) {
-  return isChecked(l) ? h('span', { key, className: 'dh-check is-checked', title: 'DwellHunt reviewed this listing before it went live.' }, '✓ DwellHunt checked')
-    : h('span', { key, className: 'dh-check is-unchecked', title: 'A DwellHunt Verified agent published this listing directly. DwellHunt has not reviewed it.' }, 'Not checked by DwellHunt');
+  return isChecked(l) ? h('span', { key, className: 'dh-check is-checked', title: 'DwellHunt reviewed this listing before it went live.' }, '✓ Verified property')
+    : null; // a listing an agent published straight away is shown as a plain listing
 }
 
 /** The badge as a React element. size: 'sm' (cards, inline) or 'md' (profile and listing headers). */

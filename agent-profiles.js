@@ -1,7 +1,7 @@
 /* Public agent profiles and posts (homepage "Verified agents" strip + "#agent=AG-…" profile page).
  * Data comes from the Worker's read-only /agents/public routes; agent email and phone are never public.
  * "Contact" sends a DwellHunt lead (lead-turnstile.js adds the human check) that the backend emails to the agent. */
-import { verifiedBadge } from './verified-badge.js?v=20261126-sp1';
+import { verifiedBadge } from './verified-badge.js?v=20261126-sp3';
 const isAgentId = id => /^AG-\d{4}-\d{4}$/.test(String(id || ''));
 export function agentFromHash(hash) {
   const m = /^#agent=(AG-\d{4}-\d{4})$/.exec(decodeURIComponent(String(hash || '')));

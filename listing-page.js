@@ -1,7 +1,7 @@
 // Full-page listing view for verified owner and agent listings (opened from the homepage feed at #owner-listing=OL-…).
 // Layout: photo collage + lightbox, price and key facts, highlights, facts & features, cost estimate, map, lister card,
 // and a sticky contact card. All contact still goes through DwellHunt (the agent enquiry form or DwellHunt's WhatsApp).
-import { verifiedBadge, checkMark, isChecked } from './verified-badge.js?v=20261126-sp1';
+import { verifiedBadge, checkMark, isChecked } from './verified-badge.js?v=20261126-sp3';
 const LABEL = {
   furnishing: { unfurnished: 'Unfurnished', 'semi-furnished': 'Partly furnished', 'fully-furnished': 'Fully furnished' },
   parkingType: { covered: 'covered', open: 'open', garage: 'garage', street: 'street' },
@@ -330,8 +330,8 @@ export function createListingPage(React, d) {
                 h('div', null, h('strong', null, lister), h('p', null, agent ? 'Enquiries go through DwellHunt' : '✓ Verified owner · DwellHunt handles every enquiry'),
                   agent && l.agentId && h('button', { type: 'button', className: 'dh-ap-link', onClick: () => { location.hash = 'agent=' + l.agentId; } }, `View ${lister}’s profile →`))),
               h('details', { className: 'dh-ol-verified' }, h('summary', null, agent ? 'What does “verified agent” mean?' : 'What does “verified owner” mean?'),
-                h('p', null, agent ? 'DwellHunt checked this agent’s details before approving their account. ' + (isChecked(l) ? 'Our team also reviewed this listing before it went live.'
-                  : 'The agent published this listing directly, and DwellHunt has not reviewed it.') + ' This is not a legal title check.'
+                h('p', null, agent ? 'DwellHunt verified this agent’s details before approving their account. ' + (isChecked(l) ? 'Our team also reviewed this listing before it went live.'
+                  : 'Listings marked “Verified property” were also reviewed by our team.') + ' This is not a legal title check.'
                   : 'DwellHunt spoke to the owner by phone and saw one proof of ownership, such as a utility bill, rates notice or deed page. This is not a legal title check.')),
               h('p', { className: 'dh-ol-diligence' }, 'DwellHunt checks who is listing a property but does not guarantee title, boundaries or approvals. Before paying any money, have a lawyer check the deed and do a title search.'),
               h('p', { className: 'dh-lp-guide' }, 'Guide: ', h('a', { href: './guides/' + guideFor(l)[0] + '.html' }, guideFor(l)[1] + ' →')),
