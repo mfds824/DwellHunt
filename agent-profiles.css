@@ -95,7 +95,7 @@
 .dh-ap-hero-text h2 { margin: 0; font-family: "Playfair Display", Georgia, serif; font-size: clamp(26px, 4vw, 36px); font-weight: 700; color: #0b2a4a; line-height: 1.15; }
 .dh-ap-stats { margin: 6px 0 0; color: #4a5b70; font-size: 14px; }
 .dh-ap-hero-cta { flex: none; }
-.dh-ap-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; margin-top: 20px; align-items: start; }
+.dh-ap-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; margin-top: 20px; align-items: start; }
 .dh-ap-main { display: grid; gap: 20px; min-width: 0; }
 .dh-ap-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 20px; padding: 22px 24px; display: grid; gap: 12px; }
 .dh-ap-box > h3 { margin: 0; font-family: "Playfair Display", Georgia, serif; font-size: 20px; color: #0b2a4a; }

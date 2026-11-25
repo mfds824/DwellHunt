@@ -1,6 +1,6 @@
 /* Public agent profiles and posts (homepage "Verified agents" strip + "#agent=AG-…" profile page).
  * Data comes from the Worker's read-only /agents/public routes; agent email and phone are never public.
- * "Contact" sends a DwellHunt lead (lead-turnstile.js adds the human check) that the backend emails to the agent. */
+ * Buyers enquire from each listing (through DwellHunt); the profile itself has no contact form. */
 import { verifiedBadge } from './verified-badge.js?v=20261126-sp3';
 const isAgentId = id => /^AG-\d{4}-\d{4}$/.test(String(id || ''));
 export function agentFromHash(hash) {
@@ -89,51 +89,6 @@ export function createAgentProfiles(React) {
         onClick: () => openAgent(a.id), 'aria-label': `View ${a.agency}’s profile` }, avatar(a), h('span', null, a.agency)))));
   }
 
-  function Contact({ agent }) {
-    const [f, setF] = React.useState({ name: '', email: '', phone: '', message: '', consent: false });
-    const [state, setState] = React.useState({ phase: 'idle', message: '' });
-    const honeypot = React.useRef(null);
-    const set = k => e => setF(o => ({ ...o, [k]: k === 'consent' ? e.target.checked : e.target.value }));
-    const submit = async e => {
-      e.preventDefault();
-      if (honeypot.current && honeypot.current.value) { setState({ phase: 'done', message: '' }); return; }
-      if (!f.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()) || !f.message.trim() || !f.consent) { setState({ phase: 'error', message: 'Please add your name, email and a message, and tick the consent box.' }); return; }
-      const url = (window.DWELLHUNT_VIEWING || {}).leadUrl;
-      if (!url) { setState({ phase: 'error', message: 'Messages are being set up. Please try again later.' }); return; }
-      setState({ phase: 'sending', message: '' });
-      const at = new Date();
-      try {
-        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-          customer_name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), enquiry_type: 'general', property: `Agent profile: ${agent.agency}`,
-          property_id: agent.id, agency_id: '', location: (agent.areas || [])[0] || '', budget: '', message: f.message.trim(), preferred_date: '',
-          source: 'DwellHunt Website', submittedAt: at.toISOString(), lead_id: 'enq-' + at.getTime(), consent: true, consent_at: at.toISOString() }) });
-        if (!r.ok) throw new Error('send');
-        setState({ phase: 'done', message: '' });
-      } catch { setState({ phase: 'error', message: 'Your message could not be sent. Please try again.' }); }
-    };
-    if (state.phase === 'done') return h('div', { className: 'dh-ap-contact', role: 'status' }, h('strong', null, 'Message sent'), h('p', null, `${agent.agency} will contact you soon. We’ve emailed you a confirmation.`));
-    return h('form', { className: 'dh-ap-contact', onSubmit: submit, noValidate: true },
-      h('h3', null, `Contact ${agent.agency}`),
-      h('div', { className: 'dh-ap-row' }, h('label', null, 'Your name', h('input', { value: f.name, onChange: set('name'), autoComplete: 'name', autoFocus: true })),
-        h('label', null, 'Email', h('input', { type: 'email', value: f.email, onChange: set('email'), autoComplete: 'email' }))),
-      h('label', null, 'Phone / WhatsApp (optional)', h('input', { type: 'tel', value: f.phone, onChange: set('phone'), autoComplete: 'tel' })),
-      h('label', null, 'Message', h('textarea', { rows: 3, value: f.message, onChange: set('message'), placeholder: 'What are you looking for?' })),
-      h('label', { className: 'dh-ap-consent' }, h('input', { type: 'checkbox', checked: f.consent, onChange: set('consent') }),
-        h('span', null, `I agree that DwellHunt and ${agent.agency} may use these details to reply to me.`)),
-      h('div', { className: 'dh-hp', 'aria-hidden': 'true' }, h('label', null, 'Leave empty', h('input', { ref: honeypot, type: 'text', tabIndex: -1, autoComplete: 'off', defaultValue: '' }))),
-      state.message && h('p', { className: 'dh-ap-error', role: 'alert' }, state.message),
-      h('button', { type: 'submit', className: 'dh-button', disabled: state.phase === 'sending' }, state.phase === 'sending' ? 'Sending…' : 'Send message'));
-  }
-
-  /** The profile reads as a profile first; the message form opens only when the visitor asks for it. */
-  function ContactPanel({ agent }) {
-    const [open, setOpen] = React.useState(false);
-    if (open) return h(Contact, { agent });
-    return h('div', { className: 'dh-ap-cta' },
-      h('button', { type: 'button', className: 'dh-button', onClick: () => setOpen(true) }, `Contact ${agent.agency}`),
-      h('p', { className: 'dh-ap-muted' }, `Your message goes to ${agent.agency} through DwellHunt.`));
-  }
-
   function ListingCard({ listing: l, onOpen }) {
     const photo = safeImage(l.photos && l.photos[0] && l.photos[0].url);
     const facts = listingFacts(l), place = listingPlace(l);
@@ -186,13 +141,7 @@ export function createAgentProfiles(React) {
     const close = () => { if (from) { setFrom(''); openListing(from); return; } history.replaceState(null, '', location.pathname + location.search); setId(''); };
     const listings = agent ? agent.listings || [] : [], areas = agent ? (agent.areas || []).filter(Boolean) : [];
     const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-    // The profile page scrolls inside its own layer, so scroll that layer to the contact panel (below the top bar).
-    const toContact = () => {
-      const page = document.querySelector('.dh-ap-full'), el = document.getElementById('dh-ap-contact');
-      if (!page || !el) return;
-      page.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 72) });
-    };
-    // A full page over the site: cover band, the agent's details, then About, listings and posts, with the contact panel alongside.
+    // A full page over the site: cover band, the agent's details, then About, listings and posts.
     return h('div', { className: 'dh-ap-full', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dh-ap-name' },
       h('div', { className: 'dh-ap-topbar' },
         h('button', { type: 'button', className: 'dh-ap-topbar-back', onClick: close }, from ? '← Back to listing' : '← Back to DwellHunt'),
@@ -208,8 +157,7 @@ export function createAgentProfiles(React) {
             agent.name && agent.agency && h('p', { className: 'dh-ap-agency' }, agent.agency),
             h('p', { className: 'dh-ap-stats' }, [count(listings.length, 'active listing'), areas.length ? count(areas.length, 'area') : '',
               (agent.languages || []).length ? count(agent.languages.length, 'language') : ''].filter(Boolean).join(' · ')),
-            h('div', { className: 'dh-ap-badges' }, profileBadges(h, agent))),
-          h('button', { type: 'button', className: 'dh-button dh-ap-hero-cta', onClick: toContact }, `Contact ${agent.agency || 'agent'}`)),
+            h('div', { className: 'dh-ap-badges' }, profileBadges(h, agent)))),
         h('div', { className: 'dh-ap-layout' },
           h('main', { className: 'dh-ap-main' },
             h('section', { className: 'dh-ap-box' }, h('h3', null, `About ${agent.name || agent.agency}`),
@@ -222,8 +170,7 @@ export function createAgentProfiles(React) {
               listings.length ? h('div', { className: 'dh-ap-cards' }, listings.map(l => h(ListingCard, { key: l.reference, listing: l, onOpen: openListing })))
                 : h('p', { className: 'dh-ap-muted' }, 'No live listings right now.')),
             agent.posts && agent.posts.length > 0 && h('section', { className: 'dh-ap-box' }, h('h3', null, 'Posts'),
-              h('div', { className: 'dh-ap-posts' }, agent.posts.map(p => h(PostCard, { key: p.id, post: p, agency: agent.agency, onOpen: openListing }))))),
-          h('aside', { className: 'dh-ap-aside', id: 'dh-ap-contact' }, h('div', { className: 'dh-ap-box dh-ap-contact-card' }, h(ContactPanel, { agent }))))));
+              h('div', { className: 'dh-ap-posts' }, agent.posts.map(p => h(PostCard, { key: p.id, post: p, agency: agent.agency, onOpen: openListing }))))))));
   }
   return { AgentStrip, AgentProfileOverlay };
 }
