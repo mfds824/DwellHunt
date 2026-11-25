@@ -2,6 +2,14 @@
 // Shown only for approved agents - the public feeds never include others - and never self-claimed.
 export const VERIFIED_MEANING = 'DwellHunt Verified: DwellHunt reviewed and approved this agent, who signs in with their own email. It is not a legal or licence guarantee.';
 
+/** DwellHunt reviewed this listing itself. Owner listings always are; a verified agent may publish without a check.
+ * Feeds from before the flag existed had only checked listings. */
+export const isChecked = l => !!l && l.checked !== false;
+export function checkMark(h, l, key) {
+  return isChecked(l) ? h('span', { key, className: 'dh-check is-checked', title: 'DwellHunt reviewed this listing before it went live.' }, '✓ DwellHunt checked')
+    : h('span', { key, className: 'dh-check is-unchecked', title: 'A DwellHunt Verified agent published this listing directly. DwellHunt has not reviewed it.' }, 'Not checked by DwellHunt');
+}
+
 /** The badge as a React element. size: 'sm' (cards, inline) or 'md' (profile and listing headers). */
 export function verifiedBadge(h, size = 'md', key) {
   return h('span', { key, className: `dh-verified dh-verified-${size}`, title: VERIFIED_MEANING, role: 'img', 'aria-label': 'DwellHunt Verified agent' },

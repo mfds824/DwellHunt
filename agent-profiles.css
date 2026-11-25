@@ -64,3 +64,16 @@
   color: #0b2a4a; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; }
 .dh-ap-feature svg { color: #1d6fd8; flex: none; }
 .dh-ap-langs { margin: 8px 0 0; color: #4a5b70; font-size: 13px; }
+
+/* Post cards with listing details (26 Nov 2026). */
+.dh-ap-post-body { display: grid; gap: 4px; padding: 0 12px; }
+.dh-ap-post-body p, .dh-ap-post-body small { margin: 0; }
+.dh-ap-post-topic.is-closed { background: #4a5b70; }
+.dh-ap-post-title { font-size: 15px; color: #0f1e33; line-height: 1.35; }
+.dh-ap-post-price { color: #0b2a4a; font-weight: 800; font-size: 15px; }
+.dh-ap-post-facts { color: #4a5b70; font-size: 12px; }
+.dh-ap-post small { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-top: 4px; }
+.dh-ap-post { align-content: start; }
+.dh-ap-post-body { align-content: start; }
+.dh-ap-post-body:first-child { padding-top: 12px; }
+.dh-ap-post-topic { align-self: start; }

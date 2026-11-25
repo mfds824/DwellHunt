@@ -2,7 +2,7 @@
  * sign-in and the agent dashboard. Agents send listings through the owner form (owner-listing.js) with their session,
  * so every listing joins the same DwellHunt review. The backend is the Worker's /api/dwellhunt/agents/* routes. */
 import { passwordKey, passwordProblem } from './password-strength.js?v=20261124-pw1';
-import { verifiedBadge } from './verified-badge.js?v=20261124-vb2';
+import { verifiedBadge } from './verified-badge.js?v=20261126-sp1';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 
 const SESSION_KEY = 'dwellhunt_agent_session';
@@ -46,7 +46,7 @@ export function agentMessage(code) {
   })[code] || 'Something went wrong on our side. Please try again in a few minutes, or message us on WhatsApp.';
 }
 
-const RETRYABLE = new Set(['verify', 'password', 'me', 'signout', 'profile', 'posts', 'posts/delete', 'telegram']);
+const RETRYABLE = new Set(['verify', 'password', 'listings/check', 'me', 'signout', 'profile', 'posts', 'posts/delete', 'telegram']);
 /** POSTs to an agent route and returns the JSON body. Calls without a one-time human-check token are retried
  * a few times when the backend is briefly busy. Throws an Error whose message is safe to show. */
 export async function agentCall(path, body, fetchImpl = fetch, pause = ms => new Promise(r => setTimeout(r, ms))) {
@@ -74,6 +74,7 @@ export function phoneParts(phone) {
   const p = String(phone || '');
   return p.startsWith('+94') ? { countryCode: '+94', phoneNumber: p.slice(3) } : { countryCode: '', phoneNumber: '' };
 }
+export const POST_TOPICS = { listed: 'Just listed', price: 'Price reduced', viewing: 'Viewing slots open', closed: 'Rented / sold', tip: 'Market tip' };
 export const AGENT_STATUS_LABELS = { 'pending review': 'In review', 'changes requested': 'Changes requested', published: 'Live',
   rejected: 'Not approved', expired: 'Ended', withdrawn: 'Closed' };
 const niceDate = iso => { const t = Date.parse(iso); return Number.isFinite(t) ? new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''; };
@@ -301,9 +302,9 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
     const upload = async e => {
       const file = e.target.files && e.target.files[0]; e.target.value = '';
       if (!file) return;
-      setState({ busy: true, message: 'Uploading logo…', ok: false });
-      try { const url = await uploadPhoto(file); setF(o => ({ ...o, logo: url })); setState({ busy: false, message: 'Logo uploaded. Press Save to keep it.', ok: true }); }
-      catch (error) { setState({ busy: false, message: error.message || 'The logo could not be uploaded.', ok: false }); }
+      setState({ busy: true, message: 'Uploading photo…', ok: false });
+      try { const url = await uploadPhoto(file); setF(o => ({ ...o, logo: url })); setState({ busy: false, message: 'Photo uploaded. Press Save profile to keep it.', ok: true }); }
+      catch (error) { setState({ busy: false, message: error.message || 'The photo could not be uploaded.', ok: false }); }
     };
     const save = async e => {
       e.preventDefault(); setState({ busy: true, message: '', ok: false });
@@ -317,9 +318,9 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
       h('div', { className: 'dh-agent-panel-head' }, h('h2', { className: 'dh-agent-h2' }, 'Your public profile'),
         a.id && h('a', { className: 'dh-agent-link', href: './#agent=' + a.id, target: '_blank', rel: 'noopener' }, 'View public profile ↗')),
       h('div', { className: 'dh-agent-logo-row' },
-        h('span', { className: 'dh-agent-logo' }, f.logo ? h('img', { src: f.logo, alt: '' }) : String(a.agency || '?').slice(0, 2).toUpperCase()),
+        h('span', { className: 'dh-agent-logo' }, f.logo ? h('img', { src: f.logo, alt: 'Your profile photo' }) : String(a.agency || '?').slice(0, 2).toUpperCase()),
         h('input', { ref: pick, type: 'file', accept: 'image/jpeg,image/png,image/webp', hidden: true, onChange: upload }),
-        h('button', { type: 'button', className: secondary, onClick: () => pick.current && pick.current.click(), disabled: state.busy }, f.logo ? 'Change logo' : 'Add logo'),
+        h('button', { type: 'button', className: secondary, onClick: () => pick.current && pick.current.click(), disabled: state.busy }, f.logo ? 'Change profile photo' : 'Add profile photo'),
         f.logo && h('button', { type: 'button', className: 'dh-agent-link', onClick: () => setF(o => ({ ...o, logo: '' })) }, 'Remove')),
       h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-bio' }, 'About your agency'),
         h('textarea', { id: 'dh-agent-bio', rows: 3, maxLength: 600, value: f.bio, onChange: e => setF(o => ({ ...o, bio: e.target.value })), placeholder: 'What you specialise in and how long you have worked…' })),
@@ -335,44 +336,80 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
       h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Saving…' : 'Save profile'));
   }
 
+  /** New post: a topic, then (for property posts) one of the agent's own listings whose approved details fill the post. */
   function PostComposer({ session, listings, onPosted }) {
-    const [f, setF] = React.useState({ kind: 'post', caption: '', photo: '', listingRef: '' });
+    const blank = { topic: 'listed', caption: '', photo: '', listingRef: '' };
+    const [f, setF] = React.useState(blank);
     const [state, setState] = React.useState({ busy: false, message: '', ok: false });
     const pick = React.useRef(null);
-    const live = listings.filter(l => l.status === 'published');
+    const property = f.topic !== 'tip';
+    // "Rented / sold" may name a listing that has just ended; the other property topics need a live one.
+    const choices = listings.filter(l => l.status === 'published' || (f.topic === 'closed' && ['withdrawn', 'expired'].includes(l.status)));
+    const chosen = property ? choices.find(l => l.reference === f.listingRef) : null;
+    const set = (key, value) => setF(o => ({ ...o, [key]: value }));
     const upload = async e => {
       const file = e.target.files && e.target.files[0]; e.target.value = '';
       if (!file) return;
       setState({ busy: true, message: 'Uploading photo…', ok: false });
-      try { const url = await uploadPhoto(file); setF(o => ({ ...o, photo: url })); setState({ busy: false, message: '', ok: false }); }
+      try { const url = await uploadPhoto(file); set('photo', url); setState({ busy: false, message: '', ok: false }); }
       catch (error) { setState({ busy: false, message: error.message || 'The photo could not be uploaded.', ok: false }); }
     };
     const publish = async e => {
       e.preventDefault();
-      if (!f.caption.trim() && !f.photo) { setState({ busy: false, message: 'Write something or add a photo.', ok: false }); return; }
+      if (property && !chosen) { setState({ busy: false, message: 'Choose the listing this post is about.', ok: false }); return; }
+      if (!property && !f.caption.trim() && !f.photo) { setState({ busy: false, message: 'Write your tip or add a photo.', ok: false }); return; }
       setState({ busy: true, message: '', ok: false });
       try {
-        await agentCall('posts', { session: session.session, kind: 'post', caption: f.caption, photo: f.photo, listingRef: f.listingRef });
-        setF({ kind: 'post', caption: '', photo: '', listingRef: '' });
+        await agentCall('posts', { session: session.session, kind: 'post', topic: f.topic, caption: f.caption, photo: f.photo, listingRef: property ? f.listingRef : '' });
+        setF(blank);
         setState({ busy: false, message: 'Post is live on your profile.', ok: true }); onPosted();
       } catch (error) { setState({ busy: false, message: error.message, ok: false }); }
     };
-    return h('form', { className: 'dh-agent-panel', onSubmit: publish },
+    const money = l => l.price ? `${l.currency || 'LKR'} ${Number(l.price).toLocaleString('en-US')}${l.pricePeriod ? ' / ' + l.pricePeriod : ''}` : '';
+    return h('form', { className: 'dh-agent-panel dh-post-form', onSubmit: publish },
       h('h2', { className: 'dh-agent-h2' }, 'New post'),
-      h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-caption' }, 'Caption'),
-        h('textarea', { id: 'dh-agent-caption', rows: 3, maxLength: 500, value: f.caption, onChange: e => setF(o => ({ ...o, caption: e.target.value })),
-          placeholder: 'Just listed: 2-bedroom apartment near the park…' })),
+      h('fieldset', { className: 'dh-agent-field dh-agent-choices' }, h('legend', null, '1. What is this post about?'),
+        h('div', { className: 'dh-agent-chips' }, Object.entries(POST_TOPICS).map(([key, label]) => h('label', { key, className: 'dh-agent-chip' + (f.topic === key ? ' is-on' : '') },
+          h('input', { type: 'radio', name: 'dh-post-topic', checked: f.topic === key, onChange: () => setF(o => ({ ...o, topic: key, listingRef: key === 'tip' ? '' : o.listingRef })) }), label)))),
+      property && h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-link-listing' }, '2. Which listing?'),
+        choices.length ? h('select', { id: 'dh-agent-link-listing', value: f.listingRef, onChange: e => set('listingRef', e.target.value) },
+          h('option', { value: '' }, 'Choose one of your listings'), choices.map(l => h('option', { key: l.reference, value: l.reference }, `${l.reference} · ${l.title}`)))
+          : h('p', { className: 'dh-agent-meta' }, f.topic === 'closed' ? 'You have no live or recently ended listings.' : 'You have no live listings yet. Add one with “+ New listing”.'),
+        h('p', { className: 'dh-agent-hint' }, 'Price, size, area and photos come from the listing, so buyers always see its real details.')),
+      h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-caption' }, property ? '3. Your message (optional)' : '2. Your tip'),
+        h('textarea', { id: 'dh-agent-caption', rows: 3, maxLength: 500, value: f.caption, onChange: e => set('caption', e.target.value),
+          placeholder: property ? 'Bright corner unit, walking distance to schools. Video viewings this week.' : 'Rents in Colombo 07 have stayed steady this year…' })),
       h('div', { className: 'dh-agent-logo-row' },
         f.photo ? h('img', { className: 'dh-agent-post-photo', src: f.photo, alt: '' }) : null,
         h('input', { ref: pick, type: 'file', accept: 'image/jpeg,image/png,image/webp', hidden: true, onChange: upload }),
-        h('button', { type: 'button', className: secondary, onClick: () => pick.current && pick.current.click(), disabled: state.busy }, f.photo ? 'Change photo' : 'Add photo'),
-        f.photo && h('button', { type: 'button', className: 'dh-agent-link', onClick: () => setF(o => ({ ...o, photo: '' })) }, 'Remove')),
-      live.length > 0 && h('div', { className: 'dh-agent-field' }, h('label', { htmlFor: 'dh-agent-link-listing' }, 'Link to one of your live listings (optional)'),
-        h('select', { id: 'dh-agent-link-listing', value: f.listingRef, onChange: e => setF(o => ({ ...o, listingRef: e.target.value })) },
-          h('option', { value: '' }, 'No listing'), live.map(l => h('option', { key: l.reference, value: l.reference }, `${l.reference} · ${l.title}`)))),
+        h('button', { type: 'button', className: secondary, onClick: () => pick.current && pick.current.click(), disabled: state.busy },
+          f.photo ? 'Change photo' : property ? 'Use a different photo (optional)' : 'Add photo (optional)'),
+        f.photo && h('button', { type: 'button', className: 'dh-agent-link', onClick: () => set('photo', '') }, 'Remove')),
+      chosen && h('div', { className: 'dh-post-preview', 'aria-label': 'Preview of your post' },
+        h('p', { className: 'dh-agent-meta' }, 'Preview'),
+        h('div', { className: 'dh-post-card' }, h('span', { className: 'dh-post-topic' }, POST_TOPICS[f.topic]),
+          h('strong', null, chosen.title), money(chosen) && h('span', { className: 'dh-post-price' }, money(chosen)),
+          h('span', { className: 'dh-agent-meta' }, [chosen.city, chosen.reference].filter(Boolean).join(' · ')),
+          f.caption.trim() && h('p', null, f.caption.trim()))),
       h('p', { className: 'dh-agent-meta' }, 'Posts go live straight away. Links are removed, and DwellHunt may take down anything that breaks the rules.'),
       state.message && h('p', { role: 'status', className: state.ok ? 'dh-agent-notice' : 'dh-agent-error' }, state.message),
       h('button', { type: 'submit', className: primary, disabled: state.busy }, state.busy ? 'Publishing…' : 'Publish post'));
+  }
+
+  /** A live listing's DwellHunt check: checked, requested, or a button to ask for it. */
+  function CheckState({ session, listing: l, onChanged }) {
+    const [state, setState] = React.useState({ busy: false, message: '' });
+    if (l.check === 'checked') return h('small', { className: 'dh-agent-check-ok' }, '✓ DwellHunt checked');
+    if (l.check === 'requested') return h('small', null, 'Check requested');
+    if (l.check !== 'not checked') return null;
+    const ask = async () => {
+      setState({ busy: true, message: '' });
+      try { await agentCall('listings/check', { session: session.session, reference: l.reference }); onChanged(); }
+      catch (error) { setState({ busy: false, message: error.message }); }
+    };
+    return h(React.Fragment, null, h('small', null, 'Not checked by DwellHunt'),
+      h('button', { type: 'button', className: 'dh-agent-link', disabled: state.busy, onClick: ask }, state.busy ? 'Sending…' : 'Request a DwellHunt check'),
+      state.message && h('small', { role: 'alert', className: 'dh-agent-error-text' }, state.message));
   }
 
   function MyPosts({ session, posts, onChanged }) {
@@ -381,8 +418,8 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
     const remove = async id => { setBusy(id); try { await agentCall('posts/delete', { session: session.session, postId: id }); onChanged(); } catch { /* the list refreshes on the next load */ } setBusy(''); };
     return h('div', { className: 'dh-agent-panel' }, h('h2', { className: 'dh-agent-h2' }, 'Your posts'),
       h('ul', { className: 'dh-agent-list' }, posts.filter(p => p.kind !== 'story').map(p => h('li', { key: p.id },
-        h('div', null, h('p', { className: 'dh-agent-title' }, p.caption || '(photo)'),
-          h('p', { className: 'dh-agent-meta' }, `Post · ${niceDate(p.at)}`)),
+        h('div', null, h('p', { className: 'dh-agent-title' }, p.caption || '(no message)'),
+          h('p', { className: 'dh-agent-meta' }, `${POST_TOPICS[p.topic] || 'Post'} · ${niceDate(p.at)}${p.listingRef ? ' · ' + p.listingRef : ''}`)),
         h('button', { type: 'button', className: 'dh-agent-link', disabled: busy === p.id, onClick: () => remove(p.id) }, busy === p.id ? 'Deleting…' : 'Delete')))));
   }
 
@@ -436,14 +473,15 @@ export function createListPropertyPage(React, { OwnerStart, OwnerListing, create
         data.loading ? h('p', { className: 'dh-agent-lead', role: 'status' }, 'Loading your listings…')
           : data.message ? h('p', { role: 'alert', className: 'dh-agent-error' }, data.message)
           : !data.listings.length ? h('div', { className: 'dh-agent-empty' }, h('p', null, 'You haven’t sent any listings yet.'),
-              h('p', null, 'Every listing is checked by DwellHunt before it goes live for 1 month. Buyer enquiries are emailed to you.'))
+              h('p', null, 'Publish straight away, or send a listing to DwellHunt to check first. Listings stay live for 1 month, and buyer enquiries are emailed to you.'))
           : h('ul', { className: 'dh-agent-list' }, data.listings.map(l => h('li', { key: l.reference },
               h('div', null, h('p', { className: 'dh-agent-title' }, l.title || l.reference),
                 h('p', { className: 'dh-agent-meta' }, [l.reference, l.city, l.price ? `${l.currency} ${Number(l.price).toLocaleString('en-US')}${l.pricePeriod ? ' / ' + l.pricePeriod : ''}` : ''].filter(Boolean).join(' · '))),
               h('div', { className: 'dh-agent-status', 'data-status': l.status },
                 AGENT_STATUS_LABELS[l.status] || l.status,
                 l.status === 'published' && l.expiresAt ? h('small', null, 'until ' + niceDate(l.expiresAt)) : null,
-                l.status === 'pending review' && l.sentAt ? h('small', null, 'sent ' + niceDate(l.sentAt)) : null))))),
+                l.status === 'pending review' && l.sentAt ? h('small', null, 'sent ' + niceDate(l.sentAt)) : null,
+                l.status === 'published' && h(CheckState, { session, listing: l, onChanged: refresh })))))),
       !data.loading && data.profile && h('div', { className: 'dh-agent-panels' },
         h(PostComposer, { session, listings: data.listings, onPosted: refresh }),
         h(MyPosts, { session, posts: data.posts, onChanged: refresh }),

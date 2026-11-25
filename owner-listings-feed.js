@@ -1,7 +1,7 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
-import { verifiedBadge } from './verified-badge.js?v=20261124-vb2';
-import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261124-vb2";
+import { verifiedBadge, checkMark } from './verified-badge.js?v=20261126-sp1';
+import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261126-sp1";
 import { createCountryCodePicker } from "./country-code-picker.js?v=20261123-cc1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
@@ -259,9 +259,9 @@ export function createOwnerFeed(React) {
     const anyAgent = listings.some(isAgentListing);
     return h('section', { className: 'dh-section dh-owner-feed', id: 'dh-owner-listings', 'aria-labelledby': 'dh-owner-feed-title' },
       h('div', { className: 'dh-section-heading' },
-        h('div', null, h('p', { className: 'dh-eyebrow' }, anyAgent ? 'Verified listings' : 'Direct from owners'),
-          h('h2', { id: 'dh-owner-feed-title' }, anyAgent ? 'Listed by owners and agents, verified by DwellHunt.' : 'Listed by owners, verified by DwellHunt.')),
-        h('p', null, anyAgent ? 'We check every owner and agent before their listings go live. Enquire through DwellHunt and we will connect you.'
+        h('div', null, h('p', { className: 'dh-eyebrow' }, anyAgent ? 'Owners and verified agents' : 'Direct from owners'),
+          h('h2', { id: 'dh-owner-feed-title' }, anyAgent ? 'Listed by owners and DwellHunt Verified agents.' : 'Listed by owners, verified by DwellHunt.')),
+        h('p', null, anyAgent ? 'We verify every owner and agent. Listings marked “DwellHunt checked” were also reviewed by our team. Enquire through DwellHunt and we will connect you.'
           : 'We checked each owner by phone and saw a proof of ownership. Enquire through DwellHunt and we will connect you.')),
       h('div', { className: 'dh-property-grid' }, listings.slice(0, 12).map(l => h('article', { key: l.reference, className: 'dh-property' },
         h('div', { className: 'dh-property-photo' },
@@ -276,7 +276,7 @@ export function createOwnerFeed(React) {
           ownerFacts(l).length > 0 && h('p', null, ownerFacts(l).join(' · ')),
           isAgentListing(l) && l.agentId
             ? h('p', { className: 'dh-agency' }, 'Listed by ', h('button', { type: 'button', className: 'dh-ap-link', onClick: () => { location.hash = 'agent=' + l.agentId; } },
-                (l.contact && l.contact.displayName) || 'a verified agent'), ' ', verifiedBadge(h, 'sm'))
+                (l.contact && l.contact.displayName) || 'a verified agent'), ' ', verifiedBadge(h, 'sm'), ' ', checkMark(h, l))
             : h('p', { className: 'dh-agency' }, listerLabel(l)),
           h('div', { className: 'dh-card-actions' },
             h('button', { type: 'button', className: 'dh-text-button', onClick: () => show(l.reference) }, 'View details'),

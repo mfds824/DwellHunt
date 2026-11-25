@@ -35,7 +35,7 @@ export async function sendOwnerListing(url, submission, token, honeypot, fetchIm
   let body = {};
   try { body = await response.json(); } catch { /* handled below */ }
   if (!response.ok || body.ok !== true || !body.reference) throw Object.assign(new Error(submissionMessage(body.code)), { code: body.code || 'SERVICE_UNAVAILABLE', fields: body.fields });
-  return { reference: String(body.reference), duplicate: body.duplicate === true };
+  return { reference: String(body.reference), duplicate: body.duplicate === true, status: String(body.status || '') };
 }
 
 export function createOwnerStart(React) {
@@ -53,7 +53,7 @@ export function createOwnerStart(React) {
       h('div', { className: 'text-center max-w-xl mx-auto mb-10' },
         h('span', { className: 'inline-flex px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold mb-2' }, agent ? 'AGENT LISTING · ' + String(agent.agency || '').toUpperCase() : 'FREE FOR PROPERTY OWNERS'),
         h('h1', { className: 'text-3xl sm:text-4xl font-black text-stone-900 tracking-tight' }, agent ? 'New listing' : 'List your property'),
-        h('p', { className: 'text-stone-500 text-sm mt-2' }, agent ? 'Choose rent or sale and the property type. DwellHunt reviews every listing before it goes live for 1 month.'
+        h('p', { className: 'text-stone-500 text-sm mt-2' }, agent ? 'Choose rent or sale and the property type. At the end you can publish straight away, or send it to DwellHunt to check first.'
           : 'Tell us about your home in 7 short steps. DwellHunt checks every listing, keeps your phone number private and screens enquiries for you.')),
       h('section', { className: 'bg-white rounded-3xl p-6 sm:p-10 border border-stone-200/90 shadow-sm space-y-8' },
         h('fieldset', { className: 'space-y-3' }, h('legend', { className: 'text-xs font-bold text-stone-700 uppercase tracking-wider mb-2' }, 'I want to'),
@@ -89,6 +89,8 @@ export function createOwnerListing(React) {
     const [titleSuggestions, setTitleSuggestions] = React.useState(null);
     const [descriptionDraft, setDescriptionDraft] = React.useState(null);
     const [send, setSend] = React.useState({ phase: 'idle', message: '', reference: '' });
+    // Verified agents choose: publish straight away (shown as not checked) or send it to DwellHunt to check first.
+    const [publishNow, setPublishNow] = React.useState(true);
     const [token, setToken] = React.useState('');
     const files = React.useRef(new Map());
     const heading = React.useRef(null), captcha = React.useRef(null), widget = React.useRef(null), honeypot = React.useRef(null);
@@ -209,7 +211,8 @@ export function createOwnerListing(React) {
         h('h3', { className: 'text-xl font-bold text-stone-900' }, preview.title || 'Your listing title'),
         h('p', { className: 'font-bold text-emerald-900' }, priceText()), h('p', null, locationText || 'Location'), keyFacts(),
         description(preview.description || 'Your description'),
-        h('p', { className: 'dh-owner-hint' }, `Listed by ${preview.contact.displayName} · Verified by DwellHunt · Enquiries through DwellHunt`)));
+        h('p', { className: 'dh-owner-hint' }, agent ? `Listed by ${(agent.agent && agent.agent.agency) || preview.contact.displayName} · DwellHunt Verified agent · Enquiries through DwellHunt`
+          : `Listed by ${preview.contact.displayName} · Verified by DwellHunt · Enquiries through DwellHunt`)));
 
     const terms = () => sale ? h(React.Fragment, null,
         grid(field('currency', 'Currency', { options: ['LKR', 'USD', 'GBP', 'AED'] }),
@@ -312,7 +315,13 @@ export function createOwnerListing(React) {
         validateOwnerDraft(d).map(section => h('div', { className: 'dh-owner-error-summary', key: section.step }, h('strong', null, `${OWNER_STEPS[section.step]} needs attention`),
           h('ul', null, Object.values(section.errors).map(error => h('li', { key: error }, error))), button('Fix this', () => go(section.step)))),
         publicCard(),
-        h('div', { className: 'dh-owner-note space-y-1' }, h('strong', null, 'What happens next'),
+        agent ? h('fieldset', { className: 'dh-listing-group dh-publish-choice' }, h('legend', { className: 'font-bold text-stone-900 mb-2' }, 'How do you want to publish it?'),
+          [[true, 'Publish now', 'It goes live straight away for 1 month with your DwellHunt Verified badge, marked “Not checked by DwellHunt”. You can ask for a check later.'],
+           [false, 'Send to DwellHunt to check first', 'Our team reviews it, usually within 1 working day. It then goes live with the “DwellHunt checked” mark.']]
+            .map(([value, title, text]) => h('label', { key: title, className: 'dh-publish-option', 'data-selected': publishNow === value },
+              h('input', { type: 'radio', name: 'dh-publish', checked: publishNow === value, onChange: () => setPublishNow(value), disabled: busy }),
+              h('span', null, h('strong', null, title), h('small', null, text)))))
+        : h('div', { className: 'dh-owner-note space-y-1' }, h('strong', null, 'What happens next'),
           h('ol', { className: 'list-decimal pl-5 space-y-1' }, h('li', null, 'You get an email with your reference number.'),
             h('li', null, 'Within 1 working day DwellHunt calls or WhatsApps you to verify the listing. We’ll ask you to share one proof of ownership, such as a utility bill or a deed page, by WhatsApp.'),
             h('li', null, 'Once verified, your listing goes live for 1 month. We’ll remind you before it ends so you can renew it.'))),
@@ -350,10 +359,10 @@ export function createOwnerListing(React) {
           onDraftChange(old => ({ ...old, photos: old.photos.map(done), floorPlan: old.floorPlan && done(old.floorPlan) }));
         }
         setSend({ phase: 'sending', message: 'Sending your listing to DwellHunt…', reference: '' });
-        const result = await sendOwnerListing(sendUrl, agent ? { ...ownerSubmission(current), session: agent.session } : ownerSubmission(current), token, honeypot.current?.value || '');
+        const result = await sendOwnerListing(sendUrl, agent ? { ...ownerSubmission(current), session: agent.session, publishNow } : ownerSubmission(current), token, honeypot.current?.value || '');
         try { localStorage.removeItem(OWNER_DRAFT_KEY); } catch { /* nothing saved */ }
         setSaveEnabled(false); patch({ status: 'sent', deviceSavingEnabled: false });
-        setSend({ phase: 'done', message: '', reference: result.reference });
+        setSend({ phase: 'done', message: '', reference: result.reference, live: result.status === 'published' });
       } catch (error) {
         setToken(''); try { if (widget.current !== null) window.turnstile?.reset(widget.current); } catch { /* ignore */ }
         setSend({ phase: 'error', message: error.message, reference: '' });
@@ -372,13 +381,17 @@ export function createOwnerListing(React) {
     if (send.phase === 'done') return h('div', { className: 'dh-owner py-12 bg-stone-50 min-h-screen' }, h('div', { className: 'max-w-2xl mx-auto px-4 sm:px-6 lg:px-8' },
       h('section', { className: 'bg-white rounded-3xl p-6 sm:p-10 border border-stone-200/90 shadow-sm space-y-5 text-center' },
         h('div', { className: 'text-4xl', 'aria-hidden': true }, '✅'),
-        h('h1', { ref: heading, tabIndex: -1, className: 'text-2xl sm:text-3xl font-black text-stone-900' }, 'Your listing has been sent'),
+        h('h1', { ref: heading, tabIndex: -1, className: 'text-2xl sm:text-3xl font-black text-stone-900' }, send.live ? 'Your listing is live' : 'Your listing has been sent'),
         h('p', null, 'Your reference number is'), h('p', { className: 'text-2xl font-black text-emerald-900 tracking-wider' }, send.reference),
         h('div', { className: 'dh-owner-note text-left space-y-1' }, h('strong', null, 'What happens next'),
-          h('ol', { className: 'list-decimal pl-5 space-y-1' }, h('li', null, `We’ve emailed the details to ${d.email}.`),
+          send.live ? h('ol', { className: 'list-decimal pl-5 space-y-1' }, h('li', null, `It’s live on DwellHunt for 1 month. We’ve emailed the details to ${d.email}.`),
+            h('li', null, 'It shows your DwellHunt Verified badge and is marked “Not checked by DwellHunt”.'),
+            h('li', null, 'For the “DwellHunt checked” mark, press “Request a DwellHunt check” next to it on your dashboard.'))
+          : h('ol', { className: 'list-decimal pl-5 space-y-1' }, h('li', null, `We’ve emailed the details to ${d.email}.`),
             agent ? h('li', null, 'DwellHunt will review it, usually within 1 working day, and may contact you to confirm you are authorised to advertise it.')
               : h('li', null, 'Within 1 working day DwellHunt will call or WhatsApp you to verify the listing and ask for one proof of ownership.'),
             h('li', null, agent ? 'Once approved, it goes live for 1 month, and buyer enquiries are emailed to you.' : 'Once verified, your listing goes live for 1 month, and we pass genuine enquiries to you.'))),
+        send.live && h('a', { className: secondary, href: '#owner-listing=' + send.reference, target: '_blank', rel: 'noopener' }, 'View your listing'),
         button(agent ? 'Back to your dashboard' : 'Back to DwellHunt', onStart, primary))));
 
     return h('div', { className: 'dh-owner py-12 bg-stone-50 min-h-screen' }, h('div', { className: 'max-w-4xl mx-auto px-4 sm:px-6 lg:px-8' },
@@ -398,7 +411,7 @@ export function createOwnerListing(React) {
           sections[d.step](),
           h('div', { className: 'dh-owner-navigation pt-4 flex justify-between' },
             button(d.step === 0 ? 'Back' : 'Previous step', () => d.step === 0 ? onStart() : go(d.step - 1), secondary, { disabled: busy }),
-            h('button', { type: 'submit', className: primary, disabled: busy }, d.step === 6 ? (busy ? send.message : 'Send for review') : d.step === 5 ? 'Review & send' : 'Continue')))),
+            h('button', { type: 'submit', className: primary, disabled: busy }, d.step === 6 ? (busy ? send.message : agent && publishNow ? 'Publish now' : 'Send for review') : d.step === 5 ? 'Review & send' : 'Continue')))),
       h('div', { className: 'mt-6 text-center' }, h('label', { className: 'dh-owner-checkbox inline-flex' },
         h('input', { type: 'checkbox', checked: saveEnabled, onChange: e => { setSaveEnabled(e.target.checked); patch({ deviceSavingEnabled: e.target.checked }); if (!e.target.checked) { try { localStorage.removeItem(OWNER_DRAFT_KEY); } catch { /* ignore */ } setSaveState(''); } } }),
         'Save my progress on this browser'),

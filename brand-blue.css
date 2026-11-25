@@ -39,3 +39,9 @@ body, #root > .min-h-screen { background-color: var(--dh-champagne) !important; 
 .dh-verified-md { padding: 7px 12px; font-size: 13px; }
 .dh-verified-sm { padding: 4px 8px; font-size: 11px; gap: 4px; border-radius: 6px; }
 .dh-verified-icon { color: #c9a24d; flex: none; }
+
+/* Listing check mark (26 Nov 2026): agents may publish without a DwellHunt review. */
+.dh-check { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 6px; font-family: "Plus Jakarta Sans", Arial, sans-serif;
+  font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; vertical-align: middle; cursor: help; }
+.dh-check.is-checked { background: #eff5fd; color: #11458c; border: 1px solid #bcd5f5; }
+.dh-check.is-unchecked { background: #fff; color: #4a5b70; border: 1px dashed #b7c4d4; }

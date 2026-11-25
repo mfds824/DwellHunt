@@ -114,3 +114,13 @@
 .dh-agent-remember input { width: 16px; height: 16px; margin-top: 3px; accent-color: #0b2a4a; flex: none; }
 .dh-agent-remember small { display: block; color: #4a5b70; font-size: 12px; }
 .dh-agent-hidden-user { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* Publish choice, listing check state and the new post form (26 Nov 2026). */
+.dh-agent-check-ok { color: #1d6fd8 !important; }
+.dh-agent-error-text { color: #b91c1c !important; white-space: normal; max-width: 240px; text-align: right; }
+.dh-post-preview { display: grid; gap: 6px; }
+.dh-post-card { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid #d6e0ec; border-radius: 12px; background: #fff; }
+.dh-post-card p { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: #0f1e33; }
+.dh-post-card strong { color: #0f1e33; font-size: 15px; }
+.dh-post-topic, .dh-ap-post-topic { justify-self: start; background: #0b2a4a; color: #fff; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 700; }
+.dh-post-price { color: #0b2a4a; font-weight: 800; font-size: 15px; }

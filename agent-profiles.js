@@ -1,7 +1,7 @@
 /* Public agent profiles and posts (homepage "Verified agents" strip + "#agent=AG-…" profile page).
  * Data comes from the Worker's read-only /agents/public routes; agent email and phone are never public.
  * "Contact" sends a DwellHunt lead (lead-turnstile.js adds the human check) that the backend emails to the agent. */
-import { verifiedBadge } from './verified-badge.js?v=20261124-vb2';
+import { verifiedBadge } from './verified-badge.js?v=20261126-sp1';
 const isAgentId = id => /^AG-\d{4}-\d{4}$/.test(String(id || ''));
 export function agentFromHash(hash) {
   const m = /^#agent=(AG-\d{4}-\d{4})$/.exec(decodeURIComponent(String(hash || '')));
@@ -30,6 +30,7 @@ export function loadAgent(id, fetchImpl = fetch) {
   return fetchImpl(base() + '/public/one?id=' + encodeURIComponent(id), { headers: { Accept: 'application/json' } })
     .then(r => r.ok ? r.json() : null).then(b => b && b.ok && b.agent ? b.agent : null).catch(() => null);
 }
+const POST_TOPIC_LABELS = { listed: 'Just listed', price: 'Price reduced', viewing: 'Viewing slots open', closed: 'Rented / sold', tip: 'Market tip' };
 const price = l => Number(l.price) > 0 ? `${l.currency || 'LKR'} ${Number(l.price).toLocaleString('en-US')}${l.purpose === 'buy' ? '' : ' / month'}` : 'Price on request';
 const plural = (n, word) => `${n} ${word}${Number(n) === 1 ? '' : 's'}`;
 export function listingFacts(l) {
@@ -145,6 +146,23 @@ export function createAgentProfiles(React) {
         place && h('span', { className: 'dh-ap-card-place' }, place)));
   }
 
+  /** A post: its topic, then the listing's own details (never typed into the post), the agent's message and a link to the listing. */
+  function PostCard({ post: p, agency, onOpen }) {
+    const l = p.listing, photo = safeImage(p.photo) || (l && safeImage(l.photo));
+    const facts = l ? [Number(l.bedrooms) > 0 ? plural(l.bedrooms, 'bed') : '', Number(l.bathrooms) > 0 ? plural(l.bathrooms, 'bath') : '',
+      Number(l.floorArea) > 0 ? `${Number(l.floorArea).toLocaleString('en-US')} ${l.floorUnit || 'sqft'}` : '', l.place].filter(Boolean).join(' · ') : '';
+    return h('article', { className: 'dh-ap-post' },
+      photo && h('img', { src: photo, alt: l ? l.title : '', loading: 'lazy' }),
+      h('div', { className: 'dh-ap-post-body' },
+        POST_TOPIC_LABELS[p.topic] && h('span', { className: 'dh-ap-post-topic' + (p.topic === 'closed' ? ' is-closed' : '') }, POST_TOPIC_LABELS[p.topic]),
+        l && h('strong', { className: 'dh-ap-post-title' }, l.title),
+        l && Number(l.price) > 0 && h('span', { className: 'dh-ap-post-price' }, `${l.currency || 'LKR'} ${Number(l.price).toLocaleString('en-US')}${l.pricePeriod ? ' / ' + l.pricePeriod : ''}`),
+        facts && h('span', { className: 'dh-ap-post-facts' }, facts),
+        p.caption && h('p', null, p.caption),
+        h('small', null, [agency, timeAgo(p.at)].filter(Boolean).join(' · '),
+          l && l.live ? h('button', { type: 'button', className: 'dh-ap-link', onClick: () => onOpen(l.reference) }, 'View listing →') : null)));
+  }
+
   /** Full profile page shown over the homepage when the address ends in #agent=AG-…. */
   function AgentProfileOverlay() {
     const [id, setId] = React.useState(() => agentFromHash(location.hash));
@@ -184,10 +202,7 @@ export function createAgentProfiles(React) {
             (agent.listings || []).length ? h('div', { className: 'dh-ap-cards' }, agent.listings.map(l => h(ListingCard, { key: l.reference, listing: l, onOpen: openListing })))
               : h('p', { className: 'dh-ap-muted' }, 'No live listings right now.')),
           agent.posts && agent.posts.length > 0 && h('div', { className: 'dh-ap-section' }, h('h3', null, 'Posts'),
-            h('div', { className: 'dh-ap-posts' }, agent.posts.map(p => h('article', { key: p.id, className: 'dh-ap-post' },
-              safeImage(p.photo) && h('img', { src: p.photo, alt: '', loading: 'lazy' }),
-              p.caption && h('p', null, p.caption),
-              h('small', null, timeAgo(p.at), p.listingRef ? ' · ' : '', p.listingRef ? h('button', { type: 'button', className: 'dh-ap-link', onClick: () => openListing(p.listingRef) }, 'See listing') : null))))),
+            h('div', { className: 'dh-ap-posts' }, agent.posts.map(p => h(PostCard, { key: p.id, post: p, agency: agent.agency, onOpen: openListing })))),
           h(ContactPanel, { agent }))));
   }
   return { AgentStrip, AgentProfileOverlay };

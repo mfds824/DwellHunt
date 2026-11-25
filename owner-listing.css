@@ -88,3 +88,11 @@
   .dh-listing-choice { padding-inline: 10px; }
   .dh-listing-choice[data-selected="true"] .dh-listing-check { top: -7px; right: -7px; transform: none; width: 20px; height: 20px; font-size: 11px; background: #0b2a4a; color: #ffffff; border: 2px solid #ffffff; }
 }
+
+/* Agent publish choice (26 Nov 2026). */
+.dh-publish-choice { display: grid; gap: 10px; }
+.dh-publish-option { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid #d6e0ec; border-radius: 14px; background: #fff; cursor: pointer; }
+.dh-publish-option[data-selected="true"] { border-color: #0b2a4a; box-shadow: 0 0 0 1px #0b2a4a; }
+.dh-publish-option input { margin-top: 3px; width: 16px; height: 16px; accent-color: #0b2a4a; flex: none; }
+.dh-publish-option strong { display: block; color: #0f1e33; }
+.dh-publish-option small { display: block; color: #4a5b70; font-size: 13px; line-height: 1.5; margin-top: 2px; }
