@@ -1,4 +1,4 @@
-import { APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, SALE_SCOPES, rulesFor, publicOwnerListing, publicText } from './owner-listing-model.js?v=20261123-ap1';
+import { APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, SALE_SCOPES, VIEWS, rulesFor, publicOwnerListing, publicText } from './owner-listing-model.js?v=20261126-vw1';
 import { formatPriceInput } from './price-input.js?v=20261123-pw1';
 
 // Builds a fact-based description draft on the owner's device. No AI service is used and nothing is sent.
@@ -42,6 +42,7 @@ export function draftOwnerDescription(d) {
   if (rules.apartment && entered(d.floorNumber)) bullets.push(`Floor: ${Number(d.floorNumber) === 0 ? 'Ground floor' : d.floorNumber}`);
   const amenities = [...new Set([...(d.features || []), ...(rules.apartment ? d.sharedFacilities || [] : []), rules.apartment && d.balcony ? 'Balcony' : '',
     rules.outdoor && d.garden ? 'Garden' : '', rules.outdoor && d.pool ? 'Private pool' : ''].map(text).filter(Boolean))];
+  if (!rules.landOnly && label(VIEWS, d.view)) bullets.push(label(VIEWS, d.view));
   if (amenities.length) bullets.push(`Features: ${amenities.join(', ')}`);
   if (Number(d.price) > 0) bullets.push(`${sale ? 'Asking price' : shortStay ? 'Nightly rate' : 'Rent'}: ${d.currency} ${formatPriceInput(String(d.price))}${!sale && !shortStay ? (d.billingPeriod === 'year' ? ' per year' : ' per month') : ''}`);
   if (sale && d.negotiable) bullets.push('Price is negotiable');

@@ -19,6 +19,9 @@ export const APARTMENT_TYPES = [['studio', 'Studio'], ['standard', 'Standard apa
 export const COMMERCIAL_TYPES = [['office', 'Office'], ['shop', 'Shop / retail'], ['warehouse', 'Warehouse / storage'], ['other', 'Other commercial']];
 export const LAND_TYPES = [['residential', 'Residential'], ['commercial', 'Commercial'], ['agricultural', 'Agricultural / estate']];
 export const ANNEX_POSITIONS = [['upstairs', 'Upper floor of a house'], ['ground', 'Ground floor, attached to a house'], ['detached', 'Separate building on the same land']];
+/** The main view from the property (optional; land listings have none). */
+export const VIEWS = [['sea', 'Sea view'], ['lake', 'Lake view'], ['city', 'City view'], ['golf', 'Golf course view'], ['garden', 'Garden view'],
+  ['pool', 'Pool view'], ['mountain', 'Mountain view'], ['paddy', 'Paddy field view']];
 export const KITCHEN_TYPES = [['own', 'Own kitchen'], ['pantry', 'Pantry / kitchenette'], ['shared', 'Shared with the main house'], ['none', 'No kitchen']];
 export const SALE_SCOPES = [['with-house', 'Sold together with the main house'], ['annex-only', 'Annex only, with its own deed or land share']];
 export const TENANT_TYPES = [['family', 'Families'], ['professionals', 'Working professionals'], ['students', 'Students'], ['foreigners', 'Foreigners / expats']];
@@ -33,7 +36,7 @@ export function createOwnerDraft(selection) {
     apartmentType: '', commercialType: '', landType: '',
     annexPosition: '', separateEntrance: '', kitchenType: '', ownerOnPremises: '', saleScope: '',
     title: '', bedrooms: '', bathrooms: '', bathroomType: '', floorArea: '', floorUnit: 'sqft', furnishing: '', condition: '',
-    parking: '', parkingType: '', floorNumber: '', balcony: false, sharedFacilities: [], maintenance: '', maintenancePeriod: 'month',
+    parking: '', parkingType: '', floorNumber: '', balcony: false, view: '', sharedFacilities: [], maintenance: '', maintenancePeriod: 'month',
     landArea: '', landUnit: 'perches', floors: '', garden: false, pool: false, features: [],
     currency: 'LKR', price: '', negotiable: false, saleAvailability: '',
     rentalType: 'long-term', billingPeriod: 'month', minimumDuration: '', advanceMonths: '', securityDeposit: '',
@@ -151,6 +154,7 @@ export function validateOwnerStep(d, step) {
     if (rules.building && !d.publicBuildingName && String(d.building).trim().length > 2 &&
         String(d.title).toLocaleLowerCase().includes(String(d.building).trim().toLocaleLowerCase()))
       errors.title = 'Your title includes the apartment project name, which you’re keeping private. Remove it, or choose to show the project name in the Visibility step.';
+    else if (titleProblem(d)) errors.title = titleProblem(d);
     const usable = d.photos.filter(p => p.status === 'selected' || (p.status === 'ready' && safeUploadUrl(p.url)));
     if (!usable.length) errors.photos = 'Add at least one photo of the actual property.';
     if (d.photos.some(p => p.status === 'failed')) errors.photos = 'Remove or re-add the photos marked “needs attention”.';
@@ -174,12 +178,30 @@ export function validateOwnerDraft(d, confirmations = false) {
 
 // Known private values can't leak through a title, description or note the owner typed.
 export function publicText(value, d) {
+  const key = v => String(v ?? '').trim().toLocaleLowerCase();
+  // A place the listing already shows is not private, e.g. the city Kandy in Kandy district.
+  const shown = [d.district, ...(d.locationPrecision === 'district' ? [] : [d.city])].map(key).filter(Boolean);
   const hidden = [d.ownerName, d.email, d.phone, d.phoneNumber, d.unit,
     ...(d.locationPrecision === 'exact' ? [] : [d.street]), ...(!d.publicBuildingName ? [d.building] : []),
-    ...(d.locationPrecision === 'district' ? [d.city] : [])].map(v => String(v ?? '').trim()).filter(v => v.length >= 3);
+    ...(d.locationPrecision === 'district' ? [d.city] : [])].map(v => String(v ?? '').trim()).filter(v => v.length >= 3 && !shown.includes(key(v)));
+  // Names match as whole words, so an owner called Ann does not hide part of "Annex".
+  const words = [d.ownerName, d.unit].map(key);
   let text = String(value ?? '');
-  for (const item of hidden) text = text.replace(new RegExp(item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '[private detail omitted]');
+  for (const item of hidden) {
+    const pattern = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    text = text.replace(words.includes(key(item)) ? new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, 'giu') : new RegExp(pattern, 'gi'), '[private detail omitted]');
+  }
   return text;
+}
+export const hasContactDetails = value => /(?:\d[\s().-]?){9,}/.test(String(value ?? '')) || /[^\s@]+@[^\s@]+\.[^\s@]+/.test(String(value ?? ''));
+/** Why this title cannot be published with the owner's current privacy choices, or an empty string. */
+export function titleProblem(d) {
+  const title = String(d.title ?? ''), city = String(d.city ?? '').trim();
+  if (hasContactDetails(title)) return 'Please remove the phone number or email from your title. Enquiries come through DwellHunt.';
+  if (!title.includes('[private detail omitted]') && publicText(title, d) === title) return '';
+  if (d.locationPrecision === 'district' && city && publicText(title, { ...d, locationPrecision: 'area' }) === title)
+    return `Your title names “${city}”, but you chose to show the district only. Choose a new title, or show your city / area in the Visibility step.`;
+  return 'Your title includes a private detail, such as your name, unit number or street. Choose a new title or remove it.';
 }
 const num = value => has(value) ? Number(value) : null;
 // Whitelist public fields. Never spread the draft or owner record into a listing.
@@ -211,6 +233,7 @@ export function publicOwnerListing(d) {
       sharedFacilities: [...d.sharedFacilities], maintenance: num(d.maintenance), maintenancePeriod: d.maintenancePeriod,
       ...(rent ? { maintenanceIncluded: d.maintenanceIncluded } : {}) } : {}),
     ...(rules.outdoor ? { garden: d.garden, pool: d.pool } : {}),
+    ...(!rules.landOnly && VIEWS.some(([id]) => id === d.view) ? { view: d.view } : {}),
     ...(rules.annex ? { annexPosition: d.annexPosition, separateEntrance: d.separateEntrance, kitchenType: d.kitchenType,
       ...(rent ? { ownerOnPremises: d.ownerOnPremises } : { saleScope: d.saleScope, landArea: num(d.landArea), landUnit: d.landUnit }) } : {}),
     ...(rules.commercial ? { commercialType: d.commercialType } : {}),

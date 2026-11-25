@@ -55,6 +55,8 @@ export function availableText(l, now = new Date()) {
   if (isNaN(d)) return '';
   return d <= now ? 'Available now' : 'Available from ' + d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
+const VIEW_LABELS = { sea: 'Sea view', lake: 'Lake view', city: 'City view', golf: 'Golf course view', garden: 'Garden view', pool: 'Pool view',
+  mountain: 'Mountain view', paddy: 'Paddy field view' };
 /** Grouped "Facts & features" rows; empty values are dropped and empty groups removed. */
 export function factGroups(l, category = {}) {
   const money = v => `${l.currency || 'LKR'} ${number(v)}`;
@@ -68,6 +70,7 @@ export function factGroups(l, category = {}) {
       ['Floor area', area],
       ['Furnishing', LABEL.furnishing[l.furnishing] || (l.furnishing ? titleCase(l.furnishing) : '')],
       ['Balcony', yesNo(l.balcony)],
+      ['View', VIEW_LABELS[l.view] || ''],
       ['Condition', l.condition ? String(l.condition) : ''],
     ]],
     ['Property', [

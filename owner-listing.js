@@ -1,11 +1,11 @@
-import { OWNER_STEPS, CATEGORY_LABELS, APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, SALE_SCOPES, rulesFor, createOwnerDraft, validateOwnerStep,
+import { OWNER_STEPS, CATEGORY_LABELS, APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, VIEWS, SALE_SCOPES, rulesFor, createOwnerDraft, validateOwnerStep,
   validateOwnerDraft, publicOwnerListing, ownerSubmission, unusualFigures, saveOwnerDraft, loadOwnerDraft, OWNER_DRAFT_KEY, combineOwnerPhone,
-  validatePhotoCount, safeUploadUrl } from './owner-listing-model.js?v=20261123-ap1';
+  validatePhotoCount, safeUploadUrl, titleProblem } from './owner-listing-model.js?v=20261126-vw1';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 import { createCountryCodePicker } from './country-code-picker.js?v=20261123-cc1';
 import { createPriceInput } from './price-input.js?v=20261123-pw1';
-import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261123-ap1';
-import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261123-pw1';
+import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261126-vw1';
+import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261126-vw1';
 
 const primary = 'px-6 py-3 rounded-xl bg-emerald-900 hover:bg-emerald-800 text-white font-bold text-xs disabled:opacity-40';
 const secondary = 'px-5 py-2.5 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50';
@@ -53,7 +53,7 @@ export function createOwnerStart(React) {
       h('div', { className: 'text-center max-w-xl mx-auto mb-10' },
         h('span', { className: 'inline-flex px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold mb-2' }, agent ? 'AGENT LISTING · ' + String(agent.agency || '').toUpperCase() : 'FREE FOR PROPERTY OWNERS'),
         h('h1', { className: 'text-3xl sm:text-4xl font-black text-stone-900 tracking-tight' }, agent ? 'New listing' : 'List your property'),
-        h('p', { className: 'text-stone-500 text-sm mt-2' }, agent ? 'Choose rent or sale and the property type. At the end you can publish straight away, or send it to DwellHunt to check first.'
+        h('p', { className: 'text-stone-500 text-sm mt-2' }, agent ? 'Choose rent or sale and the property type. At the end you can publish straight away, or send it to DwellHunt to verify first.'
           : 'Tell us about your home in 7 short steps. DwellHunt checks every listing, keeps your phone number private and screens enquiries for you.')),
       h('section', { className: 'bg-white rounded-3xl p-6 sm:p-10 border border-stone-200/90 shadow-sm space-y-8' },
         h('fieldset', { className: 'space-y-3' }, h('legend', { className: 'text-xs font-bold text-stone-700 uppercase tracking-wider mb-2' }, 'I want to'),
@@ -89,7 +89,7 @@ export function createOwnerListing(React) {
     const [titleSuggestions, setTitleSuggestions] = React.useState(null);
     const [descriptionDraft, setDescriptionDraft] = React.useState(null);
     const [send, setSend] = React.useState({ phase: 'idle', message: '', reference: '' });
-    // Verified agents choose: publish straight away (a plain listing) or send it to DwellHunt to check first.
+    // Verified agents choose: publish straight away (a plain listing) or send it to DwellHunt to verify first.
     const [publishNow, setPublishNow] = React.useState(true);
     const [token, setToken] = React.useState('');
     const files = React.useRef(new Map());
@@ -99,7 +99,7 @@ export function createOwnerListing(React) {
     const patch = changes => onDraftChange(value => ({ ...value, ...changes }));
     const change = (key, value) => {
       onDraftChange(old => { const next = { ...old, [key]: value }; if (key === 'countryCode' || key === 'phoneNumber') next.phone = combineOwnerPhone(next.countryCode, next.phoneNumber); return next; });
-      setErrors(old => { const next = { ...old }; delete next[key]; if (key === 'publicBuildingName') delete next.title; return next; });
+      setErrors(old => { const next = { ...old }; delete next[key]; if (key === 'publicBuildingName' || key === 'locationPrecision') delete next.title; return next; });
     };
     const go = step => { patch({ step }); setErrors({}); setNotice(''); };
     React.useEffect(() => { try { const saved = loadOwnerDraft(localStorage); if (saved && saved.draft.id !== d.id) setResume(saved); } catch { /* an old or damaged copy is ignored */ } }, []);
@@ -273,8 +273,10 @@ export function createOwnerListing(React) {
         rules.annex && sale && field('landUnit', 'Unit', { options: [['perches', 'Perches'], ['acres', 'Acres'], ['sqft', 'Square feet'], ['sqm', 'Square metres']] }),
         rules.apartment && field('floorNumber', 'Floor number', { type: 'number', min: -10, step: 1, hint: '0 = ground floor.' }),
         rules.apartment && field('maintenance', `Maintenance charge (${d.currency} per month)`, { type: 'number', min: 0, step: 'any', optional: true })),
-        rules.apartment && h(React.Fragment, null, check('balcony', 'Balcony'), checks('sharedFacilities', 'Building facilities (optional)', SHARED)),
+        rules.apartment && h(React.Fragment, null, check('balcony', 'Balcony'), field('view', 'View', { optional: true, options: VIEWS, hint: 'The main view from the windows or balcony.' }),
+          checks('sharedFacilities', 'Building facilities (optional)', SHARED)),
         rules.outdoor && h(React.Fragment, null, check('garden', 'Garden'), check('pool', 'Private pool')),
+        !rules.apartment && !rules.landOnly && field('view', 'View', { optional: true, options: VIEWS, hint: 'The main view from the property.' }),
         !rules.landOnly && checks('features', 'Features (optional)', FEATURES)),
       () => h(React.Fragment, null, terms(),
         unusualFigures(d).length > 0 && h('div', { className: 'dh-owner-note space-y-2' }, h('strong', null, 'Please double-check:'),
@@ -283,9 +285,12 @@ export function createOwnerListing(React) {
       () => h(React.Fragment, null,
         field('title', 'Listing title', { maxLength: 96, action: button('✨ Suggest titles', () => setTitleSuggestions({ facts: titleFactsKey(d), titles: suggestOwnerTitles(d) })) }),
         titleSuggestions && h('section', { className: 'dh-owner-title-suggestions', 'aria-label': 'Title suggestions' },
-          titleSuggestions.facts !== titleFactsKey(d) && note('Your details changed. Press “Suggest titles” again for up-to-date suggestions.'),
+          h('p', { role: 'status', className: 'dh-owner-hint' }, titleSuggestions.facts !== titleFactsKey(d) ? 'Your details changed. Press “Suggest titles” again for up-to-date suggestions.'
+            : !titleSuggestions.titles.length ? 'We could not build a title from these details without showing something private. Please write your own title.'
+            : 'Choose a title below, or write your own.'),
           titleSuggestions.titles.map((title, i) => h('div', { key: i, className: 'dh-owner-title-option' }, h('span', null, title),
-            button('Use this title', () => { change('title', title); setTitleSuggestions(null); })))),
+            button('Use this title', () => { change('title', title); setTitleSuggestions(null); }, `${secondary} disabled:opacity-40`,
+              { disabled: titleSuggestions.facts !== titleFactsKey(d), 'aria-label': `Use this title: ${title}` })))),
         h('section', { className: 'space-y-4', 'aria-labelledby': 'dh-owner-photos-label' },
           h('h3', { id: 'dh-owner-photos-label', className: 'block text-xs font-bold text-stone-700' }, 'Photos'),
           note('Take photos in daylight and show every main room. Please remove family photos and personal items before you shoot. Your photos are only uploaded when you send the listing.'),
@@ -310,14 +315,15 @@ export function createOwnerListing(React) {
         rules.building && check('publicBuildingName', `Show the apartment project name “${d.building || 'project'}” on the listing`, 'Your unit number is never shown.'),
         d.selection.listingRole !== 'agent' && check('videoViewing', 'I can show the home on a video call (optional)',
           'Buyers and tenants who live far away can book a 30-minute video viewing at times you choose each week. DwellHunt checks each request and sends it to you on Telegram to accept or decline. If you accept, DwellHunt sends you both a Google Meet link, so your phone number stays private, and you walk them through the home on your phone. Leave this unticked if you only want in-person viewings.'),
+        d.title && titleProblem(d) && h('div', { role: 'alert', className: 'dh-owner-error-summary' }, h('p', null, titleProblem(d)), button('Choose a new title', () => go(4))),
         h('h3', { className: 'font-bold text-stone-900' }, 'How your listing will look'), publicCard()),
       () => send.phase === 'done' ? null : h(React.Fragment, null,
         validateOwnerDraft(d).map(section => h('div', { className: 'dh-owner-error-summary', key: section.step }, h('strong', null, `${OWNER_STEPS[section.step]} needs attention`),
           h('ul', null, Object.values(section.errors).map(error => h('li', { key: error }, error))), button('Fix this', () => go(section.step)))),
         publicCard(),
         agent ? h('fieldset', { className: 'dh-listing-group dh-publish-choice' }, h('legend', { className: 'font-bold text-stone-900 mb-2' }, 'How do you want to publish it?'),
-          [[true, 'Publish now', 'It goes live straight away for 1 month with your DwellHunt Verified badge. You can ask DwellHunt to check it later.'],
-           [false, 'Send to DwellHunt to check first', 'Our team reviews it, usually within 1 working day. It then goes live with the “DwellHunt checked” mark.']]
+          [[true, 'Publish now', 'It goes live straight away for 1 month with your DwellHunt Verified badge. You can ask DwellHunt to verify it later.'],
+           [false, 'Send to DwellHunt to verify first', 'Our team reviews it, usually within 1 working day. It then goes live as a “Verified property”.']]
             .map(([value, title, text]) => h('label', { key: title, className: 'dh-publish-option', 'data-selected': publishNow === value },
               h('input', { type: 'radio', name: 'dh-publish', checked: publishNow === value, onChange: () => setPublishNow(value), disabled: busy }),
               h('span', null, h('strong', null, title), h('small', null, text)))))
@@ -386,7 +392,7 @@ export function createOwnerListing(React) {
         h('div', { className: 'dh-owner-note text-left space-y-1' }, h('strong', null, 'What happens next'),
           send.live ? h('ol', { className: 'list-decimal pl-5 space-y-1' }, h('li', null, `It’s live on DwellHunt for 1 month. We’ve emailed the details to ${d.email}.`),
             h('li', null, 'It shows your DwellHunt Verified badge.'),
-            h('li', null, 'For the “DwellHunt checked” mark, press “Request a DwellHunt check” next to it on your dashboard.'))
+            h('li', null, 'To make it a “Verified property”, press “Request verification” next to it on your dashboard.'))
           : h('ol', { className: 'list-decimal pl-5 space-y-1' }, h('li', null, `We’ve emailed the details to ${d.email}.`),
             agent ? h('li', null, 'DwellHunt will review it, usually within 1 working day, and may contact you to confirm you are authorised to advertise it.')
               : h('li', null, 'Within 1 working day DwellHunt will call or WhatsApp you to verify the listing and ask for one proof of ownership.'),
