@@ -260,9 +260,7 @@ export function createOwnerFeed(React) {
     return h('section', { className: 'dh-section dh-owner-feed', id: 'dh-owner-listings', 'aria-labelledby': 'dh-owner-feed-title' },
       h('div', { className: 'dh-section-heading' },
         h('div', null, h('p', { className: 'dh-eyebrow' }, anyAgent ? 'Owners and verified agents' : 'Direct from owners'),
-          h('h2', { id: 'dh-owner-feed-title' }, anyAgent ? 'Listed by owners and DwellHunt Verified agents.' : 'Listed by owners, verified by DwellHunt.')),
-        h('p', null, anyAgent ? 'We verify every owner and agent. Listings marked “Verified property” were also reviewed by our team. Enquire through DwellHunt and we will connect you.'
-          : 'We checked each owner by phone and saw a proof of ownership. Enquire through DwellHunt and we will connect you.')),
+          h('h2', { id: 'dh-owner-feed-title' }, anyAgent ? 'Listed by owners and DwellHunt Verified agents.' : 'Listed by owners, verified by DwellHunt.'))),
       h('div', { className: 'dh-property-grid' }, listings.slice(0, 12).map(l => h('article', { key: l.reference, className: 'dh-property' },
         h('div', { className: 'dh-property-photo' },
           h('img', { src: safeImage(l.photos[0].url), alt: l.title, loading: 'lazy', width: 600, height: 450 }),
