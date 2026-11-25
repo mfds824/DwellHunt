@@ -1,7 +1,7 @@
 import { SORT_OPTIONS, budgetPresets, budgetValue, budgetError, selectedBudgetPreset, budgetSummary, rentalPeriod, filterHomeListings, sortHomeListings, locationSuggestions, locationQuery, budgetKind, priceForMonthly, monthlyForPrice, comparisonPriceLKR } from "./homepage-search.js?v=20261126-q1";
 import { createOwnerFeed } from "./owner-listings-feed.js?v=20261126-q1";
-import { createAgentProfiles } from "./agent-profiles.js?v=20261126-mp1";
-import { AgentChip } from "./agent-chip.js?v=20261126-mp1";
+import { createAgentProfiles } from "./agent-profiles.js?v=20261126-fp1";
+import { AgentChip } from "./agent-chip.js?v=20261126-fp1";
 // Homepage presentation only. Marketplace state, routes and integrations remain in app.js.
 export function createHomepage(
   React,

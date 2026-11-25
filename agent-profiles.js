@@ -184,26 +184,46 @@ export function createAgentProfiles(React) {
     const openListing = ref => { location.hash = 'owner-listing=' + ref; };
     // Opened from a listing: closing goes back to that listing instead of dropping the visitor on the homepage.
     const close = () => { if (from) { setFrom(''); openListing(from); return; } history.replaceState(null, '', location.pathname + location.search); setId(''); };
-    return h('div', { className: 'dh-ap-backdrop dh-ap-page-backdrop', onClick: e => { if (e.target === e.currentTarget) close(); } },
-      h('div', { className: 'dh-ap-page', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dh-ap-name' },
-        h('button', { type: 'button', className: 'dh-ap-close', onClick: close, 'aria-label': from ? 'Close and go back to the listing' : 'Close' }, '×'),
-        from && h('button', { type: 'button', className: 'dh-ap-back', onClick: close }, '← Back to listing'),
-        state === 'loading' && h('p', { role: 'status' }, 'Loading profile…'),
-        state === 'missing' && h('p', { role: 'status' }, 'This agent profile is not available.'),
-        agent && h(React.Fragment, null,
-          h('header', { className: 'dh-ap-head' }, avatar(agent, 'lg'),
-            h('div', { className: 'dh-ap-head-text' }, h('h2', { id: 'dh-ap-name' }, agent.name || agent.agency),
-              agent.name && agent.agency && h('p', { className: 'dh-ap-agency' }, agent.agency),
-              h('p', { className: 'dh-ap-areas' }, h('b', null, (agent.listings || []).length), ` active listing${(agent.listings || []).length === 1 ? '' : 's'}`),
-              h('div', { className: 'dh-ap-badges' }, profileBadges(h, agent)),
-              languageLine(agent.languages) && h('p', { className: 'dh-ap-langs' }, languageLine(agent.languages)))),
-          agent.bio && h('p', { className: 'dh-ap-bio' }, agent.bio),
-          h('div', { className: 'dh-ap-section' }, h('h3', null, `Live listings (${(agent.listings || []).length})`),
-            (agent.listings || []).length ? h('div', { className: 'dh-ap-cards' }, agent.listings.map(l => h(ListingCard, { key: l.reference, listing: l, onOpen: openListing })))
-              : h('p', { className: 'dh-ap-muted' }, 'No live listings right now.')),
-          agent.posts && agent.posts.length > 0 && h('div', { className: 'dh-ap-section' }, h('h3', null, 'Posts'),
-            h('div', { className: 'dh-ap-posts' }, agent.posts.map(p => h(PostCard, { key: p.id, post: p, agency: agent.agency, onOpen: openListing })))),
-          h(ContactPanel, { agent }))));
+    const listings = agent ? agent.listings || [] : [], areas = agent ? (agent.areas || []).filter(Boolean) : [];
+    const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    // The profile page scrolls inside its own layer, so scroll that layer to the contact panel (below the top bar).
+    const toContact = () => {
+      const page = document.querySelector('.dh-ap-full'), el = document.getElementById('dh-ap-contact');
+      if (!page || !el) return;
+      page.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 72) });
+    };
+    // A full page over the site: cover band, the agent's details, then About, listings and posts, with the contact panel alongside.
+    return h('div', { className: 'dh-ap-full', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dh-ap-name' },
+      h('div', { className: 'dh-ap-topbar' },
+        h('button', { type: 'button', className: 'dh-ap-topbar-back', onClick: close }, from ? '← Back to listing' : '← Back to DwellHunt'),
+        h('button', { type: 'button', className: 'dh-ap-close', onClick: close, 'aria-label': from ? 'Close and go back to the listing' : 'Close' }, '×')),
+      state === 'loading' && h('p', { role: 'status', className: 'dh-ap-full-status' }, 'Loading profile…'),
+      state === 'missing' && h('p', { role: 'status', className: 'dh-ap-full-status' }, 'This agent profile is not available.'),
+      agent && h('div', { className: 'dh-ap-full-inner' },
+        h('div', { className: 'dh-ap-cover', 'aria-hidden': 'true' }, h('span', null, 'DwellHunt Verified agent')),
+        h('header', { className: 'dh-ap-hero' },
+          avatar(agent, 'xl'),
+          h('div', { className: 'dh-ap-hero-text' },
+            h('h2', { id: 'dh-ap-name' }, agent.name || agent.agency),
+            agent.name && agent.agency && h('p', { className: 'dh-ap-agency' }, agent.agency),
+            h('p', { className: 'dh-ap-stats' }, [count(listings.length, 'active listing'), areas.length ? count(areas.length, 'area') : '',
+              (agent.languages || []).length ? count(agent.languages.length, 'language') : ''].filter(Boolean).join(' · ')),
+            h('div', { className: 'dh-ap-badges' }, profileBadges(h, agent))),
+          h('button', { type: 'button', className: 'dh-button dh-ap-hero-cta', onClick: toContact }, `Contact ${agent.agency || 'agent'}`)),
+        h('div', { className: 'dh-ap-layout' },
+          h('main', { className: 'dh-ap-main' },
+            h('section', { className: 'dh-ap-box' }, h('h3', null, `About ${agent.name || agent.agency}`),
+              agent.bio ? h('p', { className: 'dh-ap-bio' }, agent.bio) : h('p', { className: 'dh-ap-muted' }, 'This agent has not added an introduction yet.'),
+              h('dl', { className: 'dh-ap-facts' },
+                [['Agency', agent.agency], ['Specialises in', areas.join(', ')], ['Languages', (agent.languages || []).join(', ')],
+                 ['Video viewings', agent.videoViewings ? 'Available on a live video call' : ''], ['Verification', 'DwellHunt Verified agent']]
+                  .filter(([, v]) => v).flatMap(([k, v]) => [h('dt', { key: k + 't' }, k), h('dd', { key: k + 'd' }, v)]))),
+            h('section', { className: 'dh-ap-box' }, h('h3', null, `Live listings (${listings.length})`),
+              listings.length ? h('div', { className: 'dh-ap-cards' }, listings.map(l => h(ListingCard, { key: l.reference, listing: l, onOpen: openListing })))
+                : h('p', { className: 'dh-ap-muted' }, 'No live listings right now.')),
+            agent.posts && agent.posts.length > 0 && h('section', { className: 'dh-ap-box' }, h('h3', null, 'Posts'),
+              h('div', { className: 'dh-ap-posts' }, agent.posts.map(p => h(PostCard, { key: p.id, post: p, agency: agent.agency, onOpen: openListing }))))),
+          h('aside', { className: 'dh-ap-aside', id: 'dh-ap-contact' }, h('div', { className: 'dh-ap-box dh-ap-contact-card' }, h(ContactPanel, { agent }))))));
   }
   return { AgentStrip, AgentProfileOverlay };
 }
