@@ -96,7 +96,7 @@
         var TIMES = []; for (var m = 8 * 60; m < 20 * 60; m += 30) TIMES.push(('0' + Math.floor(m / 60)).slice(-2) + ('0' + m % 60).slice(-2));
         // In-person visits are 1 hour, starting on the hour from 08:00 to 19:00.
         var VISIT_TIMES = []; for (var hr = 8; hr < 20; hr++) VISIT_TIMES.push(('0' + hr).slice(-2) + '00');
-        var NOTES = { visit: 'Tap the hours when buyers can visit your home in person. Each visit is 1 hour. All times are Sri Lanka time. Buyers can only ask for these times, and you approve every request before anything is booked. You send the address only after you accept.',
+        var NOTES = { visit: 'Tap the hours when buyers can visit your home in person. Each visit is 1 hour. These times are offered only to buyers who have had a video viewing with you and ask to visit. All times are Sri Lanka time, and you approve every request before anything is booked. You send the address only after you accept.',
           video: 'Tap the times when you can show your home on a video call. Each call is 30 minutes. All times are Sri Lanka time. Buyers can only ask for these times, and you approve every request before anything is booked.' };
         var PARTS = [['Morning', '0800', '1200'], ['Afternoon', '1200', '1600'], ['Evening', '1600', '2000']];
         var $ = function (id) { return document.getElementById(id); };

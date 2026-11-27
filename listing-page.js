@@ -220,16 +220,12 @@ export function createListingPage(React, d) {
     // call when the owner offers one) instead of the WhatsApp link.
     const ownerSale = !agent && !d.hasEnquiryForm(l);
     const times = d.useSlots ? d.useSlots(ownerSale ? l.reference : '') : { slots: [], visitSlots: [] };
-    const visits = times.visitSlots || [], calls = l.videoViewing === true ? times.slots || [] : [];
-    const [kind, setKind] = React.useState('visit');
-    const shownKind = kind === 'video' && calls.length ? 'video' : visits.length ? 'visit' : 'video';
-    const booking = ownerSale && d.VideoBooking && (visits.length > 0 || calls.length > 0);
+    // Only video calls are booked here; an in-person visit follows a video call (the buyer's feedback page).
+    const calls = l.videoViewing === true ? times.slots || [] : [];
+    const booking = ownerSale && d.VideoBooking && calls.length > 0;
     return h('div', { className: 'dh-lp-contact', id: 'dh-lp-contact' },
       h('p', { className: 'dh-lp-contact-price' }, d.ownerPriceText(l)),
-      booking && visits.length > 0 && calls.length > 0 && h('div', { className: 'dh-lp-kinds', role: 'group', 'aria-label': 'Kind of viewing' },
-        [['visit', 'In person'], ['video', 'Video call']].map(([value, label]) => h('button', { key: value, type: 'button', 'aria-pressed': shownKind === value,
-          className: shownKind === value ? 'is-on' : '', onClick: () => setKind(value) }, label))),
-      booking && h(d.VideoBooking, { key: shownKind, listing: l, slots: shownKind === 'visit' ? visits : calls, kind: shownKind }),
+      booking && h(d.VideoBooking, { listing: l, slots: calls }),
       d.hasEnquiryForm(l) ? h(d.AgentEnquiry, { listing: l }) : h('div', { className: 'dh-lp-contact-owner' },
         h('h3', null, `Contact ${name} through DwellHunt`),
         h('p', null, 'DwellHunt verified this owner and passes your message on, so their phone number stays private.')),

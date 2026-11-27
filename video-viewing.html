@@ -41,6 +41,17 @@
       .fb .missed { color: var(--muted); font-size: 14px; }
       .thanks { margin-top: 16px; background: var(--chip); border-radius: 12px; padding: 12px 14px; color: var(--brand); }
       .hidden { display: none !important; }
+      .choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
+      .choices label { border: 1px solid #d6e0ec; border-radius: 999px; padding: 6px 12px; background: #fff; cursor: pointer; }
+      .choices label:has(input:checked) { border-color: #0b2a4a; background: #0b2a4a; color: #fff; }
+      .choices input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+      .err { color: #b91c1c; margin: 6px 0; }
+      .visit { margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 14px; }
+      .visit h2 { margin: 0 0 6px; font-size: 18px; }
+      .small { color: #4a5b70; font-size: 14px; }
+      .times { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+      .times button { border: 1px solid #d6e0ec; border-radius: 10px; background: #fff; padding: 8px 12px; font: inherit; cursor: pointer; }
+      .times button[aria-pressed="true"] { background: #0b2a4a; border-color: #0b2a4a; color: #fff; }
       .address { background: #eff5fd; border: 1px solid #bcd5f5; border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
       .address p { margin: 4px 0 0; white-space: pre-line; }
       .center { text-align: center; color: var(--muted); padding: 40px 0; }
@@ -67,15 +78,33 @@
           <div class="actions"><button class="btn danger" id="yes" type="button">Yes, cancel it</button><button class="btn ghost" id="no" type="button">Keep it</button></div>
         </div>
         <form class="fb hidden" id="fb">
-          <h2>How did it go?</h2>
+          <h2 id="fb-title">How was the video call?</h2>
+          <div class="choices" id="sat" role="radiogroup" aria-label="How was it">
+            <label><input type="radio" name="sat" value="great" /> <span>Very good</span></label>
+            <label><input type="radio" name="sat" value="good" /> <span>Good</span></label>
+            <label><input type="radio" name="sat" value="poor" /> <span>Not good</span></label>
+          </div>
           <label><input type="checkbox" value="shown" /> <span>The owner showed me everything I asked to see</span></label>
           <label><input type="checkbox" value="clear" /> <span id="fb-clear">The video and sound were clear</span></label>
-          <label><input type="checkbox" value="interested" /> <span>I am still interested in this home</span></label>
-          <label><input type="checkbox" value="visit" /> <span id="fb-visit">I would like to visit in person or talk about next steps</span></label>
+          <h2 id="next-title">What would you like to do next?</h2>
+          <div class="choices" id="next" role="radiogroup" aria-label="Next step">
+            <label><input type="radio" name="next" value="visit" /> <span id="next-visit">Book an in-person visit</span></label>
+            <label><input type="radio" name="next" value="thinking" /> <span>I'm still thinking</span></label>
+            <label><input type="radio" name="next" value="no" /> <span>I'm not interested</span></label>
+          </div>
           <textarea id="comment" rows="2" maxlength="500" placeholder="Anything else? (optional)"></textarea>
           <label class="missed"><input type="checkbox" id="missed" /> <span id="fb-missed">The video call did not happen</span></label>
-          <button class="btn primary" id="send" type="submit">Send feedback</button>
+          <p class="err hidden" id="fb-err" role="alert"></p>
+          <button class="btn primary" id="send" type="submit">Send</button>
         </form>
+        <section class="visit hidden" id="visit">
+          <h2>Book an in-person visit</h2>
+          <p class="small">The owner shows you the home in person. Each visit is 1 hour. Pick a time; the owner confirms within 12 hours, and then sends the address through DwellHunt. Bring someone with you if you can, and never pay anything at the visit.</p>
+          <div class="times" id="visit-times"></div>
+          <p class="small hidden" id="visit-none">The owner has no in-person times in the next few days yet. Check this page again soon; we have told the owner you would like to visit.</p>
+          <button class="btn primary hidden" id="visit-book" type="button">Request this visit</button>
+        </section>
+        <p class="thanks hidden" id="visit-done"></p>
         <p class="thanks hidden" id="thanks">Thank you for your feedback. DwellHunt will be in touch if you want to take this home further.</p>
         <p class="note" id="note">Please do not record the call. DwellHunt never asks for an advance or deposit before you, or someone you trust, have visited in person and a lawyer has checked the deed.</p>
       </section>
@@ -114,8 +143,8 @@
             : visit && r.status === 'approved' && r.address ? 'Confirmed. The address and directions from the owner are above.' : (visit && VISIT[r.status]) || STATUS[r.status] || '';
           $('heading').textContent = r.canFeedback || r.feedbackDone ? 'How was your ' + what + '?' : r.status === 'approved' ? 'Your ' + what + ' is confirmed' : r.status === 'requested' ? 'Your ' + what + ' request' : 'Your ' + what;
           $('address-box').classList.toggle('hidden', !(visit && r.address)); $('address').textContent = r.address || '';
-          if (visit) { $('fb-clear').textContent = 'The address and directions were easy to follow'; $('fb-visit').textContent = 'I would like to talk about next steps';
-            $('fb-missed').textContent = 'The visit did not happen';
+          if (visit) { $('fb-clear').textContent = 'The address and directions were easy to follow'; $('next-visit').textContent = 'Talk about next steps (offer, agreement)';
+            $('fb-title').textContent = 'How was the visit?'; $('fb-missed').textContent = 'The visit did not happen';
             $('note').textContent = 'Bring someone with you if you can. Never pay an advance, deposit or holding fee at the visit, and not before a lawyer has checked the deed. DwellHunt never asks for one.'; }
           $('join').classList.toggle('hidden', !r.meet); if (r.meet) $('join').href = r.meet;
           $('cancel').classList.toggle('hidden', !r.canCancel);
@@ -125,7 +154,38 @@
           $('fb').classList.toggle('hidden', !r.canFeedback);
           $('thanks').classList.toggle('hidden', !r.feedbackDone);
           if (r.canFeedback || r.feedbackDone) $('join').classList.add('hidden');
+          showVisit(r);
         }
+        // After a video call: the owner's in-person times for this buyer only.
+        var pickedVisit = '';
+        function showVisit(r) {
+          var box = $('visit'), list = $('visit-times'); list.textContent = ''; pickedVisit = '';
+          $('visit-book').classList.add('hidden');
+          box.classList.toggle('hidden', !r.canBookVisit);
+          $('visit-none').classList.toggle('hidden', !(r.canBookVisit && !(r.visitSlots || []).length));
+          (r.visitSlots || []).forEach(function (iso) {
+            var b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+            b.textContent = fmt(iso, zone, DAY) + ', ' + fmt(iso, zone, TIME) + (zone === 'Asia/Colombo' ? '' : ' (' + fmt(iso, 'Asia/Colombo', TIME) + ' in Sri Lanka)');
+            b.addEventListener('click', function () { pickedVisit = iso; list.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+              $('visit-book').classList.remove('hidden'); });
+            list.appendChild(b);
+          });
+          var done = $('visit-done');
+          done.classList.toggle('hidden', !r.visitBooked && !r.visitId);
+          if (r.visitBooked || r.visitId) done.textContent = 'Your in-person visit request (' + (r.visitId || r.visitBooked) + ') has been sent to the owner. We have emailed you, and the owner will answer within 12 hours.';
+          var THANKS = { no: 'Thank you for your feedback. We have let the owner know. Browse other homes on DwellHunt whenever you like.',
+            visit: 'Thank you for your feedback.', thinking: 'Thank you for your feedback. Take your time: you can come back to this page within 14 days to book an in-person visit.' };
+          if (!r.canFeedback && r.feedbackDone && THANKS[r.feedbackNext]) $('thanks').textContent = THANKS[r.feedbackNext];
+        }
+        $('visit-book').addEventListener('click', function () {
+          if (busy || !pickedVisit) return; busy = true; $('visit-book').disabled = true; $('visit-book').textContent = 'Sending…';
+          call('visit', { slot: pickedVisit }).then(function (r) {
+            busy = false; $('visit-book').disabled = false; $('visit-book').textContent = 'Request this visit';
+            if (!r.ok) { $('banner').textContent = r.code === 'SLOT_TAKEN' ? 'Sorry, that time was just taken. Please pick another.' : r.code === 'ALREADY_REQUESTED' ? 'You have already asked to visit this home.' : 'Could not send. Please try again.';
+              $('banner').classList.remove('hidden'); if (r.code === 'SLOT_TAKEN') call('get').then(function (g) { if (g.ok) show(g); }); return; }
+            show(r);
+          });
+        });
         function call(op, extra) {
           var body = { id: q.id, key: q.k, op: op }; if (extra) for (var k in extra) body[k] = extra[k];
           return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) })
@@ -146,12 +206,17 @@
           ask('To choose another time, we cancel this one first, then show you the owner\'s free times.', function () { cancel(function () { location.href = listingUrl(); }); });
         });
         $('yes').addEventListener('click', function () { if (then) then(); });
-        var boxes = function () { return Array.prototype.slice.call(document.querySelectorAll('#fb input[value]')); };
-        $('missed').addEventListener('change', function () { boxes().forEach(function (b) { b.disabled = $('missed').checked; if ($('missed').checked) b.checked = false; }); });
+        var boxes = function () { return Array.prototype.slice.call(document.querySelectorAll('#fb input[type=checkbox][value]')); };
+        var picked = function (name) { var c = document.querySelector('#fb input[name=' + name + ']:checked'); return c ? c.value : ''; };
+        $('missed').addEventListener('change', function () { document.querySelectorAll('#fb input[value]').forEach(function (b) { b.disabled = $('missed').checked; if ($('missed').checked) b.checked = false; }); });
         $('fb').addEventListener('submit', function (e) {
-          e.preventDefault(); if (busy) return; busy = true; $('send').disabled = true; $('send').textContent = 'Sending…';
-          call('feedback', { ticks: boxes().filter(function (b) { return b.checked; }).map(function (b) { return b.value; }), comment: $('comment').value.trim(), missed: $('missed').checked })
-            .then(function (r) { busy = false; $('send').disabled = false; $('send').textContent = 'Send feedback';
+          e.preventDefault(); if (busy) return;
+          var missed = $('missed').checked, sat = picked('sat'), next = picked('next');
+          if (!missed && (!sat || !next)) { $('fb-err').textContent = 'Please choose how it went and what you would like to do next.'; $('fb-err').classList.remove('hidden'); return; }
+          $('fb-err').classList.add('hidden');
+          busy = true; $('send').disabled = true; $('send').textContent = 'Sending…';
+          call('feedback', { satisfaction: sat, next: next, ticks: boxes().filter(function (b) { return b.checked; }).map(function (b) { return b.value; }), comment: $('comment').value.trim(), missed: missed })
+            .then(function (r) { busy = false; $('send').disabled = false; $('send').textContent = 'Send';
               if (!r.ok) { $('banner').textContent = r.code === 'ALREADY_SENT' ? 'Thanks, we already have your feedback.' : 'Could not send. Please try again.'; $('banner').classList.remove('hidden'); return; }
               show(r); });
         });
