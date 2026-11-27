@@ -1,11 +1,11 @@
 import { OWNER_STEPS, CATEGORY_LABELS, APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, TENANT_TYPES, ANNEX_POSITIONS, KITCHEN_TYPES, VIEWS, SALE_SCOPES, rulesFor, createOwnerDraft, validateOwnerStep,
   validateOwnerDraft, publicOwnerListing, ownerSubmission, unusualFigures, saveOwnerDraft, loadOwnerDraft, OWNER_DRAFT_KEY, combineOwnerPhone,
-  validatePhotoCount, safeUploadUrl, titleProblem } from './owner-listing-model.js?v=20261126-q1';
+  validatePhotoCount, safeUploadUrl, titleProblem } from './owner-listing-model.js?v=20261127-vv1';
 import { uploadPropertyFile, validatePropertyFile } from './property-upload.js';
 import { createCountryCodePicker } from './country-code-picker.js?v=20261123-cc1';
 import { createPriceInput } from './price-input.js?v=20261126-pw2';
-import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261126-q1';
-import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261126-pw2';
+import { suggestOwnerTitles, titleFactsKey } from './title-suggestions.js?v=20261127-vv1';
+import { draftOwnerDescription, descriptionFactsKey, descriptionBlocks, listingKeyFacts } from './description-draft.js?v=20261127-vv1';
 
 const primary = 'px-6 py-3 rounded-xl bg-emerald-900 hover:bg-emerald-800 text-white font-bold text-xs disabled:opacity-40';
 const secondary = 'px-5 py-2.5 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50';
@@ -314,8 +314,9 @@ export function createOwnerListing(React) {
         note('Enquiries and viewing requests come to DwellHunt first. We check them, then pass genuine ones to you. Your phone number and email are never shown.'),
         field('locationPrecision', 'How much of the location to show', { options: [['district', 'District only'], ['area', 'City / area and district (recommended)'], ['exact', 'Exact street address']] }),
         rules.building && check('publicBuildingName', `Show the apartment project name “${d.building || 'project'}” on the listing`, 'Your unit number is never shown.'),
-        d.selection.listingRole !== 'agent' && check('videoViewing', 'I can show the home on a video call (optional)',
-          'Buyers and tenants who live far away can book a 30-minute video viewing at times you choose each week. DwellHunt checks each request and sends it to you on Telegram to accept or decline. If you accept, DwellHunt sends you both a Google Meet link, so your phone number stays private, and you walk them through the home on your phone. Leave this unticked if you only want in-person viewings.'),
+        // Every private owner's listing is viewed by video first; there is no choice to make here.
+        d.selection.listingRole !== 'agent' && h('div', { className: 'dh-owner-field' }, h('strong', null, 'How buyers view your home'),
+          note('Every viewing starts with a 30-minute video call at times you choose each week on Telegram. DwellHunt checks each request and sends it to you to accept or decline. If you accept, DwellHunt sends you both the call link, so your phone number stays private, and you walk them through the home on your phone. After the call, buyers who want to see more can ask for a 1-hour in-person visit at your times, and you approve each one.')),
         d.title && titleProblem(d) && h('div', { role: 'alert', className: 'dh-owner-error-summary' }, h('p', null, titleProblem(d)), button('Choose a new title', () => go(4))),
         h('h3', { className: 'font-bold text-stone-900' }, 'How your listing will look'), publicCard()),
       () => send.phase === 'done' ? null : h(React.Fragment, null,

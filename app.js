@@ -1,5 +1,5 @@
-import { createOwnerListing, createOwnerStart } from "./owner-listing.js?v=20261126-pw2";
-import { createOwnerDraft } from "./owner-listing-model.js?v=20261126-q1";
+import { createOwnerListing, createOwnerStart } from "./owner-listing.js?v=20261127-vv1";
+import { createOwnerDraft } from "./owner-listing-model.js?v=20261127-vv1";
 import { createListPropertyPage } from "./agent-portal.js?v=20261126-mp1";
 import { createHomepage } from "./homepage.js?v=20261127-nv1";
 import { AgentChip as DhAgentChip } from "./agent-chip.js?v=20261126-by1";

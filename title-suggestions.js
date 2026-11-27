@@ -1,4 +1,4 @@
-import { APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, VIEWS, rulesFor, publicText, hasContactDetails } from './owner-listing-model.js?v=20261126-q1';
+import { APARTMENT_TYPES, COMMERCIAL_TYPES, LAND_TYPES, VIEWS, rulesFor, publicText, hasContactDetails } from './owner-listing-model.js?v=20261127-vv1';
 
 // Factual title suggestions built on the owner's device from entered facts only. No AI service is used.
 const text = value => String(value ?? '').trim().replace(/\s+/g, ' ');

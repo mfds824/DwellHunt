@@ -241,8 +241,8 @@ export function publicOwnerListing(d) {
     photos: d.photos.filter(p => p.status === 'ready' && safeUploadUrl(p.url)).map((p, index) => ({ url: p.url, alt: `Property photo ${index + 1}` })),
     floorPlan: d.floorPlan?.status === 'ready' && safeUploadUrl(d.floorPlan.url) ? d.floorPlan.url : null,
     description: publicText(d.description, d),
-    // Private owners may offer to show the home on a video call they start themselves.
-    ...(d.selection.listingRole !== 'agent' && d.videoViewing === true ? { videoViewing: true } : {}),
+    // Every private owner's listing is viewed by video first (the owner hosts the call); agents arrange their own viewings.
+    ...(d.selection.listingRole !== 'agent' ? { videoViewing: true } : {}),
     // Owner listings always show "Private owner"; the owner's name is never shown.
     contact: { via: 'DwellHunt', displayName: 'Private owner' },
   };
