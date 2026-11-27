@@ -225,6 +225,8 @@ export function createHomepage(
     search: ["M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", "M20 20l-4-4"],
     enquire: ["M4 5h16v11H8l-4 4z", "M8 9h8", "M8 12h5"],
     view: ["M3 7h12v10H3z", "M15 11l6-4v10l-6-4"],
+    feedback: ["M12 4l2.4 5 5.6.7-4.1 3.8 1 5.5L12 16.3 7.1 19l1-5.5L4 9.7l5.6-.7z"],
+    visit: ["M4 11l8-7 8 7", "M6 10v10h12V10", "M10 20v-6h4v6"],
   };
   /** A few areas with real homes, as photo tiles: one tap narrows the listings to that area. */
   function AreaTiles({ inventory, onPick }) {
@@ -367,9 +369,10 @@ export function createHomepage(
       h("section", { className: "dh-section dh-how", id: "dh-journeys", "aria-labelledby": "dh-how-title" },
         h("h2", { id: "dh-how-title" }, "How it works"),
         h("ol", { className: "dh-how-steps" }, [
-          ["search", "Search", "Pick an area and budget."],
-          ["enquire", "Enquire", "Ask through DwellHunt. We check every lister."],
-          ["view", "View online", "Book a virtual viewing with the agent."],
+          ["search", "Search", "Pick an area and budget. We check every lister."],
+          ["view", "View by video", "Book a 30-minute video call. The owner or agent shows you the home live."],
+          ["feedback", "Tell us how it went", "A short form after the call. The owner or agent hears your answer either way."],
+          ["visit", "Visit in person", "Liked it? Book a 1-hour visit from the same page. Never pay before a lawyer checks the deed."],
         ].map(([key, title, text]) => h("li", { key }, h("span", { className: "dh-how-icon" }, icon(STEP_ICONS[key])), h("strong", null, title), h("p", null, text)))),
         h("p", { className: "dh-how-owners" }, "Own a home or work as an agent? ",
           button("List a property →", () => go(store, "list-property"), "dh-text-button"))),

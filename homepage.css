@@ -1153,7 +1153,7 @@
   .dh-search-row { grid-template-columns: minmax(0, 1fr) 110px auto; }
   .dh-search-row .dh-search-submit { grid-column: auto; margin-top: 0; padding-inline: 22px; }
   .dh-area-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .dh-how-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  .dh-how-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
   .dh-how-steps li { grid-template-columns: 1fr; row-gap: 10px; align-items: start; }
   .dh-how-icon { grid-row: auto; }
 }
