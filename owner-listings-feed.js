@@ -1,7 +1,7 @@
 // Verified owner and agent listings on the homepage. Data comes from the Worker's read-only feed; contact always goes through DwellHunt.
 // Agent listings (listedBy "agent") get an enquiry form: the lead is saved and scored by DwellHunt and emailed to the agent.
 import { verifiedBadge, checkMark } from './verified-badge.js?v=20261126-sp3';
-import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261127-av1";
+import { createListingPage, monthlyPayment } from "./listing-page.js?v=20261127-nv1";
 import { createCountryCodePicker } from "./country-code-picker.js?v=20261123-cc1";
 const WHATSAPP = 'https://wa.me/94770153678?text=';
 const CATEGORY = { house: 'House', annex: 'Annex', room: 'Room', apartment: 'Apartment', villa: 'Villa', commercial: 'Commercial space', land: 'Land' };
@@ -198,17 +198,17 @@ export function createOwnerFeed(React) {
     const agency = (l.contact && l.contact.displayName) || (owner ? 'the owner' : 'the agent');
     const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
     const video = owner && l.videoViewing === true;
-    const [f, setF] = React.useState({ name: '', email: '', phone: '', date: '', viewing: 'in-person', consent: false,
+    const [f, setF] = React.useState({ name: '', email: '', phone: '', date: '', viewing: video ? 'video' : 'in-person', consent: false,
       message: owner ? `Hello, I'm interested in renting "${l.title}". Is it still available?` : `Hello, I'm interested in "${l.title}". Please send me more details.` });
     const [state, setState] = React.useState({ phase: 'idle', message: '' });
     const honeypot = React.useRef(null);
-    // With free times from the owner, "Video call" opens the booking form; "None of these times work?" comes back here.
-    // In-person visits are booked only after a video call, from the buyer's feedback page.
+    // A listing with video viewings shows the owner's free times first; "Ask a question instead" and "None of these times work?"
+    // come back to this form. There is no direct in-person option: visits are booked only after a video call (feedback page).
     const times = useOwnerSlots(React, video ? l.reference : '');
     const [pickTimes, setPickTimes] = React.useState(true);
     const set = key => event => { if (key === 'viewing') setPickTimes(true); setF(old => ({ ...old, [key]: key === 'consent' ? event.target.checked : event.target.value })); };
     if (video && f.viewing === 'video' && pickTimes && times.slots.length) return h('div', null,
-      h('button', { type: 'button', className: 'dh-text-button dh-vb-back', onClick: () => setF(old => ({ ...old, viewing: 'in-person' })) }, '← View in person or ask a question instead'),
+      h('button', { type: 'button', className: 'dh-text-button dh-vb-back', onClick: () => setPickTimes(false) }, '← Ask a question instead'),
       h(VideoBooking, { listing: l, slots: times.slots, onBack: () => setPickTimes(false) }));
     const submit = async event => {
       event.preventDefault();
@@ -232,18 +232,15 @@ export function createOwnerFeed(React) {
         ? 'DwellHunt will check your enquiry and ask the owner if it’s still available, then contact you. We’ve emailed you a confirmation.'
         : `${agency} will contact you soon. We’ve emailed you a confirmation.`));
     return h('form', { className: 'dh-ol-enquiry', onSubmit: submit, noValidate: true, 'aria-labelledby': 'dh-ol-enquiry-title' },
+      video && times.slots.length > 0 && h('button', { type: 'button', className: 'dh-text-button dh-vb-back', onClick: () => setPickTimes(true) }, '← Book a video viewing instead'),
       h('h3', { id: 'dh-ol-enquiry-title' }, owner ? 'Send an enquiry about this home' : `Send an enquiry to ${agency}`),
       h('div', { className: 'dh-ol-enquiry-row' },
         h('label', null, 'Your name', h('input', { value: f.name, onChange: set('name'), autoComplete: 'name', required: true })),
         h('label', null, 'Email', h('input', { type: 'email', value: f.email, onChange: set('email'), autoComplete: 'email', required: true }))),
       h('label', null, 'Phone / WhatsApp (optional)', h('input', { type: 'tel', value: f.phone, onChange: set('phone'), autoComplete: 'tel' })),
-      video && h('fieldset', { className: 'dh-ol-enquiry-viewing' }, h('legend', null, 'How would you like to view it?'),
-        [['in-person', 'In person'], ['video', 'Video call with the owner']].map(([value, label]) => h('label', { key: value },
-          h('input', { type: 'radio', name: 'dh-ol-viewing', value, checked: f.viewing === value, onChange: set('viewing') }), h('span', null, label)))),
       owner && h('label', null, f.viewing === 'video' ? 'Preferred video call date (optional)' : 'Preferred viewing date (optional)',
         h('input', { type: 'date', min: today, value: f.date, onChange: set('date') })),
-      video && f.viewing === 'video' && h('p', { className: 'dh-ol-enquiry-note' }, 'The owner walks you through the home on a Google Meet video call. DwellHunt agrees the time with the owner and emails you the link.'),
-      video && f.viewing === 'in-person' && h('p', { className: 'dh-ol-enquiry-note' }, 'Tip: book a video viewing first. After the call you can book an in-person visit at one of the owner’s times.'),
+      video && h('p', { className: 'dh-ol-enquiry-note' }, 'Viewings start with a video call: the owner walks you through the home on Google Meet. After the call you can book an in-person visit. DwellHunt agrees the time with the owner and emails you the link.'),
       h('label', null, 'Message', h('textarea', { rows: 3, value: f.message, onChange: set('message') })),
       h('label', { className: 'dh-ol-enquiry-consent' }, h('input', { type: 'checkbox', checked: f.consent, onChange: set('consent') }),
         h('span', null, owner ? 'I agree that DwellHunt may use these details to reply. DwellHunt shares my first name and message with the owner, not my phone or email.'

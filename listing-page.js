@@ -94,11 +94,11 @@ export function factGroups(l, category = {}) {
       ['Negotiable', l.negotiable ? 'Yes' : ''],
       ['Price per ' + (l.floorUnit || 'sqft'), pricePerArea(l) ? money(pricePerArea(l)) : ''],
       ['Availability', availableText(l)],
-      ['Viewings', l.videoViewing ? 'In person or by video call' : ''],
+      ['Viewings', l.videoViewing ? 'Video call first, then in person' : ''],
     ] : [
       ['Rental type', LABEL.rentalType[l.rentalType] || ''],
       ['Available', availableText(l)],
-      ['Viewings', l.videoViewing ? 'In person or by video call' : ''],
+      ['Viewings', l.videoViewing ? 'Video call first, then in person' : ''],
       ['Minimum lease', Number(l.minimumLeaseMonths) > 0 ? `${l.minimumLeaseMonths} months` : ''],
       ['Minimum stay', Number(l.minimumNights) > 0 ? `${l.minimumNights} nights` : ''],
       ['Advance', l.billingPeriod !== 'night' && l.advanceMonths !== undefined && l.advanceMonths !== null ? (Number(l.advanceMonths) === 0 ? 'None' : `${l.advanceMonths} months`) : ''],
@@ -231,7 +231,8 @@ export function createListingPage(React, d) {
         h('p', null, 'DwellHunt verified this owner and passes your message on, so their phone number stays private.')),
       h('div', { className: 'dh-lp-contact-actions' },
         h('a', { className: d.hasEnquiryForm(l) ? 'dh-text-button' : 'dh-button', href: d.ownerEnquiryUrl(l), target: '_blank', rel: 'noopener noreferrer' }, d.hasEnquiryForm(l) ? 'Or ask DwellHunt on WhatsApp' : 'Enquire on WhatsApp'),
-        h('a', { className: 'dh-text-button', href: d.ownerEnquiryUrl(l, 'viewing'), target: '_blank', rel: 'noopener noreferrer' }, 'Request a viewing'),
+        // A listing with video viewings has no direct in-person request: the visit comes after the video call.
+        l.videoViewing !== true && h('a', { className: 'dh-text-button', href: d.ownerEnquiryUrl(l, 'viewing'), target: '_blank', rel: 'noopener noreferrer' }, 'Request a viewing'),
         ownerSale && l.videoViewing === true && !calls.length &&
           h('a', { className: 'dh-text-button', href: d.ownerEnquiryUrl(l, 'video'), target: '_blank', rel: 'noopener noreferrer' }, 'Request a video viewing')),
       h('p', { className: 'dh-lp-fine' }, `Ref ${l.reference}`));
